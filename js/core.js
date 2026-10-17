@@ -185,7 +185,8 @@ const BUDDY_LINES = {
 };
 
 class World {
-  constructor(save, seed) {
+  constructor(save, seed, width) {
+    this.W = Math.max(D.W, Math.min(40, Math.floor(width || D.W)));
     this.save = save;
     this.st = stats(save);
     this.seed = seed >>> 0;
@@ -203,7 +204,7 @@ class World {
     this.sayCd = 2;
     let sy = -1;
     if (this.st.elevator > 0) sy = Math.floor(save.bestDepth * this.st.elevator) - 1;
-    const cx = Math.floor(W / 2);
+    const cx = Math.floor(this.W / 2);
     this.startY = sy;
     this.player = this.mkActor(cx, sy);
     this.buddy = this.mkActor(cx - 1, sy);
@@ -220,7 +221,7 @@ class World {
   ensure(y) { const c = stratumOf(y); if (!this.chunks.has(c)) this.gen(c); }
   row(y) { this.ensure(y); return this.rows.get(y); }
   tile(x, y) {
-    if (x < 0 || x >= W) return T.WALL;
+    if (x < 0 || x >= this.W) return T.WALL;
     if (y < 0) return y < -1 ? T.WALL : T.EMPTY;
     return this.row(y).t[x];
   }
@@ -231,9 +232,9 @@ class World {
     const st = this.st, rng = mulberry32((this.seed * 2654435761) ^ (c * 40503 + 17));
     const y0 = c * CHUNK, s = c;
     for (let y = y0; y < y0 + CHUNK; y++) {
-      const r = { t: new Uint8Array(W), hp: new Float32Array(W), max: new Float32Array(W), ore: new Int8Array(W).fill(-1), seen: new Uint8Array(W) };
+      const r = { t: new Uint8Array(this.W), hp: new Float32Array(this.W), max: new Float32Array(this.W), ore: new Int8Array(this.W).fill(-1), seen: new Uint8Array(this.W) };
       const base = hp0(s) * (1 + 0.012 * (y - y0));
-      for (let x = 0; x < W; x++) {
+      for (let x = 0; x < this.W; x++) {
         let t = T.ROCK, h = base;
         const q = rng();
         let acc = st.oreChance;
@@ -248,21 +249,21 @@ class World {
         r.t[x] = t; r.hp[x] = h; r.max[x] = h;
       }
       if (st.btunnel && y % 10 === 9) {
-        for (let x = 0; x < W; x++) if (r.t[x] === T.ROCK || r.t[x] === T.BOULDER) { r.t[x] = T.ORE; r.ore[x] = s + (rng() < 0.2 ? 1 : 0); r.hp[x] = r.max[x] = base * 0.5; }
+        for (let x = 0; x < this.W; x++) if (r.t[x] === T.ROCK || r.t[x] === T.BOULDER) { r.t[x] = T.ORE; r.ore[x] = s + (rng() < 0.2 ? 1 : 0); r.hp[x] = r.max[x] = base * 0.5; }
       }
       this.rows.set(y, r);
     }
     // caves with creatures and pools
-    const n = s === 0 ? 2 : 2 + (rng() < 0.6 ? 1 : 0);
+    const n = Math.round((s === 0 ? 2 : 2 + (rng() < 0.6 ? 1 : 0)) * this.W / D.W);
     for (let i = 0; i < n; i++) {
       const cy = y0 + (s === 0 ? 7 : 2) + Math.floor(rng() * (CHUNK - (s === 0 ? 9 : 4)));
-      const cx = Math.floor(rng() * W), rx = 1 + Math.floor(rng() * 2), ry = rng() < 0.5 ? 0 : 1;
+      const cx = Math.floor(rng() * this.W), rx = 1 + Math.floor(rng() * 2), ry = rng() < 0.5 ? 0 : 1;
       let fill = T.EMPTY;
       const pool = rng();
       if (s >= 1 && pool < 0.25) fill = T.WATER;
       if ((s === 5 || s >= 9) && pool < 0.35) fill = T.LAVA;
       for (let y = cy - ry; y <= cy + ry; y++) for (let x = cx - rx; x <= cx + rx; x++) {
-        if (x < 0 || x >= W || y < y0 || y >= y0 + CHUNK) continue;
+        if (x < 0 || x >= this.W || y < y0 || y >= y0 + CHUNK) continue;
         const rr = this.rows.get(y); rr.t[x] = (fill !== T.EMPTY && y < cy) ? T.EMPTY : fill; rr.ore[x] = -1;
       }
       if (rng() < (s === 0 ? 0.5 : 0.85)) {
@@ -374,7 +375,7 @@ class World {
   bfsNext(a, gx, gy, maxR) {
     // shortest path through passable tiles to goal (if passable) or any passable tile next to it
     const targets = new Set();
-    const key = (x, y) => (y + 2) * W + x;
+    const key = (x, y) => (y + 2) * this.W + x;
     if (passable(this.tile(gx, gy))) targets.add(key(gx, gy));
     else for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) if (passable(this.tile(gx + dx, gy + dy))) targets.add(key(gx + dx, gy + dy));
     if (!targets.size) return null;
@@ -435,7 +436,7 @@ class World {
     for (let yy = Math.max(0, y - r); yy <= y + r; yy++) {
       if (!this.rows.has(yy)) continue;
       const row = this.rows.get(yy);
-      for (let xx = Math.max(0, x - r); xx <= Math.min(W - 1, x + r); xx++) if (row.seen[xx] && Math.abs(xx - x) + Math.abs(yy - y) <= r) return true;
+      for (let xx = Math.max(0, x - r); xx <= Math.min(this.W - 1, x + r); xx++) if (row.seen[xx] && Math.abs(xx - x) + Math.abs(yy - y) <= r) return true;
     }
     return y < 0;
   }
@@ -492,7 +493,7 @@ class World {
       if (st.sniff > 0 && !far) {
         const R = 2 + st.sniff + (st.gemhunt ? 4 : 0);
         let bd = 99;
-        for (let y = Math.max(0, b.y - R); y <= b.y + R; y++) for (let x = 0; x < W; x++) {
+        for (let y = Math.max(0, b.y - R); y <= b.y + R; y++) for (let x = 0; x < this.W; x++) {
           const t = this.tile(x, y);
           if (t !== T.ORE && t !== T.CHEST) continue;
           const d = Math.abs(x - b.x) + Math.abs(y - b.y);
@@ -506,7 +507,7 @@ class World {
         const cx = far ? p.x : b.x, cy = far ? p.y : b.y;
         for (let i = 0; i < 10 && !target; i++) {
           const x = cx + Math.round((Math.random() * 2 - 1) * 4), y = cy + Math.round((Math.random() * 2 - 1) * 3);
-          if (x < 0 || x >= W || y < 0 || (x === b.x && y === b.y)) continue;
+          if (x < 0 || x >= this.W || y < 0 || (x === b.x && y === b.y)) continue;
           if (md({ x, y }, p) > leash && !far) continue;
           if (!this.nearSeen(x, y, 2)) continue;
           target = { x, y, kind: 'wander' };
@@ -606,7 +607,7 @@ class World {
     const R = Math.ceil(lr);
     for (let y = Math.max(0, p.y - R); y <= p.y + R; y++) {
       const r = this.row(y);
-      for (let x = 0; x < W; x++) if ((x - p.x) * (x - p.x) + (y - p.y) * (y - p.y) <= lr * lr) r.seen[x] = 1;
+      for (let x = 0; x < this.W; x++) if ((x - p.x) * (x - p.x) + (y - p.y) * (y - p.y) <= lr * lr) r.seen[x] = 1;
     }
     this.ensure(p.y + 30);
     if (this.oil <= 0) { this.oil = 0; this.end('oil'); }
@@ -644,7 +645,7 @@ function botThink(w) {
   }
   let best = null, bs = -1e9;
   const lr = w.lightR();
-  for (let y = p.y; y <= p.y + 3; y++) for (let x = Math.max(0, p.x - 3); x <= Math.min(W - 1, p.x + 3); x++) {
+  for (let y = p.y; y <= p.y + 3; y++) for (let x = Math.max(0, p.x - 3); x <= Math.min(w.W - 1, p.x + 3); x++) {
     if (y < 0) continue;
     const t = w.tile(x, y);
     if (t !== T.ORE && t !== T.FLASK && t !== T.CHEST) continue;

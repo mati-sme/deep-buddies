@@ -2,7 +2,7 @@
 (function (root) {
 'use strict';
 const D = root.DBData, C = root.DBCore, S = root.DBSprites;
-const { T } = C; const W = D.W;
+const { T } = C;
 
 class Renderer {
   constructor(cv) {
@@ -18,11 +18,33 @@ class Renderer {
     this.dpr = dpr; this.w = w; this.h = h;
     this.cv.width = Math.round(w * dpr); this.cv.height = Math.round(h * dpr);
     this.dark.width = this.cv.width; this.dark.height = this.cv.height;
-    this.ts = Math.max(24, Math.floor(Math.min(w / (W + 0.4), 64)));
-    this.ox = Math.floor((w - this.ts * W) / 2);
+    this.camX = null;
+    this.layout(D.W, D.W / 2);
   }
-  sx(x) { return this.ox + x * this.ts; }
-  sy(y) { return (y - this.camY) * this.ts; }
+  landscape() { return this.w > this.h * 1.1; }
+  // landscape tile size: fits ~12.5 rows (phones) / ~15 rows (big screens), snapped so 16px textures scale by whole device pixels
+  landscapeTs() {
+    const target = this.h / (this.h < 600 ? 12.5 : 15);
+    let step = 16 / this.dpr; while (step < 6) step *= 2;
+    const minTs = step * Math.ceil(26 / step);
+    return Math.min(step * Math.ceil(110 / step), Math.max(minTs, step * Math.round(target / step)));
+  }
+  idealCols() { return this.landscape() ? Math.max(D.W, Math.min(40, Math.floor(this.w / this.landscapeTs()))) : D.W; }
+  layout(W, focusX) {
+    this.ts = this.landscape() ? this.landscapeTs() : Math.max(24, Math.floor(Math.min(this.w / (D.W + 0.4), 64)));
+    const span = W * this.ts;
+    let ox;
+    if (span <= this.w) { ox = (this.w - span) / 2; this.camX = null; }
+    else { // shaft wider than the screen (e.g. rotated to portrait mid-run): follow the player sideways
+      const tgt = Math.max(this.w - span, Math.min(0, this.w / 2 - (focusX + 0.5) * this.ts));
+      this.camX = this.camX === null ? tgt : this.camX + (tgt - this.camX) * 0.15;
+      ox = this.camX;
+    }
+    this.ox = Math.round(ox * this.dpr) / this.dpr;
+    this.xa = Math.max(0, Math.floor(-this.ox / this.ts) - 1); this.xb = Math.min(W - 1, Math.ceil((this.w - this.ox) / this.ts));
+  }
+  sx(x) { return this.ox + Math.round(x * this.ts * this.dpr) / this.dpr; }
+  sy(y) { return Math.round((y - this.camY) * this.ts * this.dpr) / this.dpr; }
   tileAt(px, py) { return { x: Math.floor((px - this.ox) / this.ts), y: Math.floor(py / this.ts + this.camY) }; }
 
   /* ---- events -> juice ---- */
@@ -165,6 +187,8 @@ class Renderer {
 
   draw(w, dt) {
     this.t += dt;
+    const W = w.W;
+    this.layout(W, w.player.px);
     const ctx = this.ctx, ts = this.ts, dpr = this.dpr;
     const lr = w.lightR();
     // smooth actors
@@ -172,7 +196,7 @@ class Renderer {
     for (const a of [w.player, w.buddy]) { a.px += (a.x - a.px) * k; a.py += (a.y - a.py) * k; }
     for (const c of w.creatures) { c.px += (c.x - c.px) * Math.min(1, dt * 10); c.py += (c.y - c.py) * Math.min(1, dt * 10); }
     const viewRows = this.h / ts;
-    const target = w.player.py - viewRows * (this.campView ? 0.36 : w.player.y < 2 ? 0.55 : 0.4);
+    const target = w.player.py - viewRows * (this.campView ? (this.landscape() ? 0.5 : 0.36) : w.player.y < 2 ? 0.55 : 0.4);
     if (this.camY === null) this.camY = target;
     this.camY += (target - this.camY) * Math.min(1, dt * 5);
     this.pSwing -= dt; this.bSwing -= dt; this.shake *= Math.pow(0.002, dt); this.flash -= dt; this.hurtFlash -= dt;
@@ -193,7 +217,7 @@ class Renderer {
       // bedrock sides
       const P = D.stratum(C.stratumOf(y));
       ctx.fillStyle = S.shade(P.dark, -0.45); ctx.fillRect(-20, Y, this.ox + 20, ts + 1); ctx.fillRect(this.sx(W), Y, this.w, ts + 1);
-      for (let x = 0; x < W; x++) this.drawTile(w, x, y, this.sx(x), Y, ts);
+      for (let x = this.xa; x <= this.xb; x++) this.drawTile(w, x, y, this.sx(x), Y, ts);
     }
     // side wall edge lines
     ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(this.ox - 3, Math.max(surfY, -20), 3, this.h + 40); ctx.fillRect(this.sx(W), Math.max(surfY, -20), 3, this.h + 40);
@@ -243,7 +267,7 @@ class Renderer {
       if (surfY > -ts * 3) { const g = d.createLinearGradient(0, surfY, 0, surfY + ts * 3); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); d.globalCompositeOperation = 'destination-out'; d.fillStyle = g; d.fillRect(-30, top, this.w + 60, ts * 2.2); }
       d.globalCompositeOperation = 'destination-out';
       d.fillStyle = 'rgba(0,0,0,0.32)';
-      for (let y = Math.max(0, y0); y <= y1; y++) { const r = w.row(y); for (let x = 0; x < W; x++) if (r.seen[x]) d.fillRect(this.sx(x), this.sy(y), ts, ts); }
+      for (let y = Math.max(0, y0); y <= y1; y++) { const r = w.row(y); for (let x = this.xa; x <= this.xb; x++) if (r.seen[x]) d.fillRect(this.sx(x), this.sy(y), ts, ts); }
       const light = (ax, ay, R) => {
         const cx = this.sx(ax) + ts / 2, cy = this.sy(ay) + ts / 2;
         const g = d.createRadialGradient(cx, cy, 0, cx, cy, R);
@@ -270,7 +294,7 @@ class Renderer {
         const R2 = lr + sn;
         for (let y = Math.max(0, w.player.y - Math.ceil(R2)); y <= w.player.y + R2; y++) {
           const r = w.row(y);
-          for (let x = 0; x < W; x++) {
+          for (let x = this.xa; x <= this.xb; x++) {
             if (r.t[x] !== T.ORE && r.t[x] !== T.CHEST) continue;
             const dd = Math.hypot(x - w.player.x, y - w.player.y);
             if (dd <= lr || dd > R2) continue;

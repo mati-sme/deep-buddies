@@ -151,3 +151,62 @@ textarea { width: 100%; margin-top: 8px; background: #1a0c04; color: var(--ink);
 @keyframes popin { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes shake { 0%,100% { transform: translate(0,0); } 20% { transform: translate(-8px,4px); } 40% { transform: translate(7px,-6px); } 60% { transform: translate(-6px,6px); } 80% { transform: translate(5px,-3px); } }
 @media (min-width: 600px) { .gear small { font-size: 12px; } .node .nm { font-size: 11px; } }
+
+/* ================= Wide / landscape layout (phones in landscape, tablets, desktop 16:9, ultrawide) ================= */
+body.wide #app { max-width: none; }
+body.wide .hud-top { flex-direction: row; align-items: center; right: 120px; gap: 10px; }
+body.wide .oil { width: min(460px, 38vw); flex: none; }
+body.wide .chips { flex-wrap: nowrap; }
+body.wide #abilities { bottom: calc(14px + env(safe-area-inset-bottom)); right: calc(12px + env(safe-area-inset-right)); }
+body.wide .hud-right { right: calc(8px + env(safe-area-inset-right)); }
+body.wide .hud-top { left: calc(8px + env(safe-area-inset-left)); }
+body.wide #hint { bottom: 22px; }
+/* camp: tab rail on the left, content on the right; home card becomes a side panel so the cave scene stays visible */
+body.wide #camp { display: grid; grid-template-columns: calc(86px + env(safe-area-inset-left)) 1fr; grid-template-rows: auto minmax(0, 1fr); }
+body.wide .topbar { grid-column: 1 / 3; grid-row: 1; }
+body.wide .tabs { grid-column: 1; grid-row: 2; flex-direction: column; border-top: none; border-right: 3px solid #000; padding: 0 0 0 env(safe-area-inset-left); }
+body.wide .tabs button { flex: 1; border-right: none; border-bottom: 2px solid #000; max-height: 110px; }
+body.wide .tabs .dot { right: 14px; }
+body.wide .tab { grid-column: 2; grid-row: 2; min-height: 0; min-width: 0; overflow: hidden; }
+body.wide #tab-home { flex-direction: row; justify-content: flex-end; align-items: center; padding-right: env(safe-area-inset-right); }
+body.wide .home-spacer { display: none; }
+body.wide .home-card { width: min(440px, 44vw); margin: 10px 14px; max-height: calc(100% - 20px); overflow: auto; }
+body.wide .sheet { left: auto; right: calc(10px + env(safe-area-inset-right)); width: min(460px, 48vw); }
+body.wide .cavein { max-width: 760px; align-self: center; width: calc(100% - 16px); }
+body.wide .settings { max-width: 760px; align-self: center; }
+body.wide .modal .card { max-width: 520px; }
+.modal .card { max-height: calc(100vh - 28px); max-height: calc(100dvh - 28px); overflow: auto; }
+/* short screens (phone landscape): compact everything */
+body.short .topbar { padding-top: calc(4px + env(safe-area-inset-top)); padding-bottom: 4px; }
+body.short .logo { font-size: 17px; }
+body.short .home-card { gap: 6px; padding: 8px; }
+body.short .gear { gap: 4px; }
+body.short .gear div { font-size: 17px; padding: 3px 2px; }
+body.short .gear small { font-size: 10px; }
+body.short .dig { font-size: 24px; padding: 6px; }
+body.short .dig small { font-size: 12px; }
+body.short .goal { font-size: 13px; }
+body.short .records { font-size: 11px; }
+body.short .tabs button { font-size: 20px; padding: 3px 0; }
+body.short .tabs button small { font-size: 10px; }
+body.short .abil { width: 52px; height: 52px; font-size: 25px; border-radius: 13px; }
+body.short #abilities { gap: 7px; bottom: 8px; }
+body.short .round { width: 40px; height: 40px; font-size: 19px; }
+body.short .oil { padding: 2px 6px; } body.short .oil .big { font-size: 18px; }
+body.short .chips .chip { font-size: 12.5px; padding: 2px 6px; }
+body.short .maptools { padding: 3px 10px; font-size: 13px; }
+body.short .sheet { padding: 8px; bottom: 6px; } body.short .sheet .bigic { font-size: 34px; width: 48px; } body.short .sheet h3 { font-size: 15px; } body.short .sheet p { font-size: 12px; }
+body.short .cavein { margin: 4px auto; padding: 6px 10px; } body.short .cavein > div:first-child { font-size: 28px !important; }
+body.short .modal h2 { font-size: 19px; margin: 2px 0 6px; } body.short .sumrow { font-size: 14px; padding: 3px 8px; } body.short .sumtotal { font-size: 22px; margin: 4px 0; }
+body.short .modal .row { margin-top: 6px; }
+/* big wide screens (desktop 1080p+, ultrawide): scale the UI chrome up proportionally; the cave itself is scaled by the renderer */
+body.big .topbar, body.big .tabs, body.big .home-card, body.big .sheet, body.big .maptools, body.big .cavein, body.big .modal .card,
+body.big .hud-top, body.big .hud-right, body.big #abilities, body.big #hint, body.big .settings, body.big #toast { zoom: var(--z); }
+body.big #camp { grid-template-columns: calc(86px * var(--z)) 1fr; }
+body.big .home-card { width: min(440px, 34vw); }
+body.big .sheet { width: min(460px, 36vw); }
+body.big .oil { width: min(460px, 30vw); }
+body.big .modal .card { max-height: calc((100vh - 28px) / var(--z)); }
+body.big .home-card { max-height: calc((100% - 20px) / var(--z)); }
+body.big .node .nm { font-size: 12px; top: -20px; }
+body.big .node .lv { font-size: 12px; }

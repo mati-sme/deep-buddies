@@ -17,7 +17,7 @@ const prMaxed = () => D.PRESTIGE.every((u) => C.plvl(save, u.id) >= u.u_max || C
 const firstRuns = [];
 let lastLog = -1;
 while (play < MAX_DAYS * MIN_PER_DAY * 60) {
-  const w = new C.World(save, seed++);
+  const w = new C.World(save, seed++, +process.env.SIM_W || D.W);
   while (!w.ended && w.time < 600) { C.botThink(w); w.step(DT, null); w.ev.length = 0; }
   const r = w.result();
   C.applyRun(save, r);

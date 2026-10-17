@@ -68,3 +68,14 @@ Milestones (45 min/day of play):
   buddy evolution 4: Star Pip                      run   992  day  15.2  (22.8 h played)
   ALL prestige nodes maxed (full completion)       run  1152  day  18.9  (28.4 h played)
 ```
+
+## Shaft width (v3 landscape)
+Landscape screens get a wider world (more columns). The same 45 min/day sim was run with `SIM_W` set to each width:
+
+| Columns | Full completion |
+|---|---|
+| 11 (portrait) | day 36.8 |
+| 26 (phone landscape) | day 37.6 |
+| 40 (max, ultrawide) | day 36.5 |
+
+The differences are within run-to-run noise. Runs go down, so extra columns add almost no reachable ore. Light radius is measured in tiles, so it doesn't change either. No rebalance was needed.

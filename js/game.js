@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 const D = window.DBData, C = window.DBCore, S = window.DBSprites, A = window.DBAudio, M = window.DBMaps;
-const VERSION = 'v2';
+const VERSION = 'v3';
 const KEY = 'deep-buddies-save-v1';
 const $ = (id) => document.getElementById(id);
 const fmt = C.fmt;
@@ -23,7 +23,7 @@ const keys = [];
 let hintT = 0;
 
 function newPreview() {
-  preview = new C.World(save, 12345);
+  preview = new C.World(save, 12345, R.idealCols());
   preview.ev.length = 0; preview.player.y = -1; preview.player.py = -1;
   R.camY = null; R.bubble = null; R.campView = true;
 }
@@ -41,7 +41,8 @@ function hint(text, sec) { const h = $('hint'); h.textContent = text; h.style.op
 /* ---------- run ---------- */
 function startRun() {
   A.init(); A.SFX.click();
-  world = new C.World(save, (Date.now() ^ (save.runs * 7919)) >>> 0);
+  R.resize();
+  world = new C.World(save, (Date.now() ^ (save.runs * 7919)) >>> 0, R.idealCols());
   mode = 'run'; cmdMode = false; R.campView = false;
   R.camY = null; R.parts = []; R.pops = []; R.bubble = null;
   $('camp').classList.add('hidden'); $('hud').classList.remove('hidden');
@@ -127,7 +128,7 @@ function joyDir() {
 }
 function tapAction(cx, cy) {
   const t = canvasTileAt(cx, cy);
-  if (t.x < 0 || t.x >= D.W || t.y < -1) return;
+  if (t.x < 0 || t.x >= world.W || t.y < -1) return;
   if (cmdMode) { world.commandBuddy(t.x, Math.max(0, t.y)); toggleCmd(false); return; }
   world.player.goal = { x: t.x, y: t.y }; world.player.goalT = 6; // short tap: go dig that block
 }
@@ -355,10 +356,25 @@ function frame(now) {
   if (hintT > 0) { hintT -= dt; if (hintT <= 0) $('hint').style.opacity = 0; }
   requestAnimationFrame(frame);
 }
-window.addEventListener('resize', () => R.resize());
+function onResize() {
+  const vw = window.innerWidth, vh = window.innerHeight;
+  document.body.classList.toggle('wide', vw > vh * 1.1);
+  document.body.classList.toggle('short', vh < 560);
+  const big = vw > vh * 1.1 && vh >= 820 && vw >= 1280;
+  document.body.classList.toggle('big', big);
+  document.documentElement.style.setProperty('--z', big ? Math.min(1.6, Math.max(1.15, vh / 820)).toFixed(3) : '1');
+  R.resize();
+  if (mode === 'camp' && preview && preview.W !== R.idealCols()) newPreview();
+}
+let rzT = null;
+const queueResize = () => { onResize(); clearTimeout(rzT); rzT = setTimeout(onResize, 250); };
+window.addEventListener('resize', queueResize);
+window.addEventListener('orientationchange', queueResize);
+if (window.visualViewport) window.visualViewport.addEventListener('resize', queueResize);
 document.addEventListener('visibilitychange', () => { if (document.hidden) persist(); });
 setInterval(persist, 10000);
 
+onResize();
 newPreview();
 refreshCamp();
 showTab('home');
@@ -366,5 +382,5 @@ requestAnimationFrame(frame);
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // small hook for automated tests
-window.__db = { get save() { return save; }, get world() { return world; }, get mode() { return mode; }, startRun, showTab, C, persist };
+window.__db = { get save() { return save; }, get world() { return world; }, get mode() { return mode; }, get preview() { return preview; }, R, startRun, showTab, C, persist };
 })();
