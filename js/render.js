@@ -145,10 +145,13 @@ class Renderer {
   drawBubble(w, ts) {
     if (!this.bubble || this.bubble.t <= 0) return;
     const ctx = this.ctx, b = w.buddy;
-    const X = this.sx(b.px) + ts / 2, Y = this.sy(b.py) - ts * 0.15;
+    const X = this.sx(b.px) + ts / 2;
+    const rawY = this.sy(b.py) - ts * 0.15, off = rawY < 60 || rawY > this.h - 40;
+    const Y = Math.max(110, Math.min(this.h - 60, rawY));
+    const text = off ? '🐾 ' + this.bubble.text : this.bubble.text;
     const fs = Math.max(12, Math.round(ts * 0.36));
     ctx.font = `bold ${fs}px system-ui, sans-serif`;
-    const tw = ctx.measureText(this.bubble.text).width + fs;
+    const tw = ctx.measureText(text).width + fs;
     let bx = Math.max(4, Math.min(this.w - tw - 4, X - tw / 2)), by = Y - fs * 1.9;
     const a = Math.min(1, this.bubble.t * 3);
     ctx.globalAlpha = a;
@@ -156,7 +159,7 @@ class Renderer {
     ctx.beginPath(); ctx.roundRect(bx, by, tw, fs * 1.5, fs * 0.5); ctx.fill(); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(X - 5, by + fs * 1.5 - 1); ctx.lineTo(X, by + fs * 1.5 + 7); ctx.lineTo(X + 5, by + fs * 1.5 - 1); ctx.fill();
     ctx.fillStyle = '#3a2a1e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(this.bubble.text, bx + tw / 2, by + fs * 0.78);
+    ctx.fillText(text, bx + tw / 2, by + fs * 0.78);
     ctx.globalAlpha = 1;
   }
 

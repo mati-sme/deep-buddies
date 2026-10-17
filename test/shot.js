@@ -15,7 +15,13 @@ const { chromium } = require('playwright-core');
   await page.screenshot({ path: '/tmp/shot-camp.png' });
   await page.click('#btnDig', { force: true });
   await page.evaluate(() => { setInterval(() => { const w = window.__db.world; if (w && !w.ended) window.__db.C.botThink(w); }, 30); });
-  for (let i = 1; i <= 8; i++) { await page.waitForTimeout(2500); await page.screenshot({ path: `/tmp/shot-run${i}.png` }); const d = await page.evaluate(() => window.__db.world && [window.__db.world.player.y, window.__db.world.creatures.filter(c=>c.awake&&!c.dead).length]); console.log(i, d); }
+  const cdp = await ctx.newCDPSession(page);
+  const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+  await page.waitForTimeout(9000);
+  await touch('touchStart', 120, 640); for (let i = 1; i <= 6; i++) { await touch('touchMove', 120 + i * 3, 640 + i * 8); await page.waitForTimeout(30); }
+  await page.waitForTimeout(500); await touch('touchMove', 140, 690);
+  await page.screenshot({ path: '/tmp/shot-joy.png' }); await touch('touchEnd');
+  for (let i = 1; i <= 2; i++) { await page.waitForTimeout(2500); await page.screenshot({ path: `/tmp/shot-run${i}.png` }); const d = await page.evaluate(() => window.__db.world && [window.__db.world.player.y, window.__db.world.creatures.filter(c=>c.awake&&!c.dead).length]); console.log(i, d); }
   console.log('errors', errs);
   await browser.close();
 })();

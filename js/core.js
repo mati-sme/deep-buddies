@@ -6,6 +6,7 @@ const { W, CHUNK, HP_GROWTH, VAL_GROWTH } = D;
 
 /* ---------- tiles ---------- */
 const T = { EMPTY: 0, ROCK: 1, ORE: 2, BOULDER: 3, FLASK: 4, CHEST: 5, GAS: 6, WATER: 7, LAVA: 8, WALL: 9 };
+const C_passable = (t) => t === T.EMPTY || t === T.WATER || t === T.LAVA;
 const passable = (t) => t === T.EMPTY || t === T.WATER || t === T.LAVA;
 
 /* ---------- helpers ---------- */
@@ -180,7 +181,7 @@ const BUDDY_LINES = {
   bagfull: ['My pockets are full!', 'Bag is full!'],
   flask: ['Oil! Yay!', 'More light!'],
   boom: ['KABOOM!', 'Whoa!', 'Pfew, stinky gas!'],
-  idle: ['Dig dig dig...', 'Hmm hmm hmm...', 'I love rocks.', 'What\'s down there?', '*sniff sniff*', 'Best day ever!']
+  idle: ['I\'ll check over here!', 'Exploring!', 'Dig dig dig...', 'Hmm hmm hmm...', 'I love rocks.', 'What\'s down there?', '*sniff sniff*', 'Best day ever!']
 };
 
 class World {
@@ -206,7 +207,7 @@ class World {
     this.startY = sy;
     this.player = this.mkActor(cx, sy);
     this.buddy = this.mkActor(cx - 1, sy);
-    this.buddy.drillCd = 8; this.buddy.gemCd = 1; this.buddy.idleT = 0;
+    this.buddy.drillCd = 8; this.buddy.gemCd = 1; this.buddy.idleT = 0; this.buddy.restT = 0.5;
     if (sy >= 0) { this.setT(cx, sy, T.EMPTY); this.setT(cx - 1, sy, T.EMPTY); }
     this.depthMax = Math.max(0, sy + 1);
     this.lastStratum = stratumOf(Math.max(0, sy));
@@ -429,7 +430,108 @@ class World {
     this.ev.push({ type: 'flare' });
     return true;
   }
-  commandBuddy(x, y) { this.buddy.goal = { x, y }; this.buddy.goalT = 12; this.say('On it!', true); }
+  commandBuddy(x, y) { this.buddy.goal = { x, y, kind: 'cmd' }; this.buddy.goalT = 12; this.say('On it!', true); }
+  nearSeen(x, y, r) {
+    for (let yy = Math.max(0, y - r); yy <= y + r; yy++) {
+      if (!this.rows.has(yy)) continue;
+      const row = this.rows.get(yy);
+      for (let xx = Math.max(0, x - r); xx <= Math.min(W - 1, x + r); xx++) if (row.seen[xx] && Math.abs(xx - x) + Math.abs(yy - y) <= r) return true;
+    }
+    return y < 0;
+  }
+  buddyLeash() { return Math.max(6, this.lightR() + 4); }
+  buddyStep(dt) {
+    const st = this.st, p = this.player, b = this.buddy;
+    const bp = st.power * st.buddyRatio, bs = st.move * 0.8;
+    const md = (a, c) => Math.abs(a.x - c.x) + Math.abs(a.y - c.y);
+    const dist = md(b, p);
+    b.restT -= dt; b.gemCd -= dt;
+    if (dist > 22) { // popped too far away: he tunnels back into the explored mine
+      b.x = p.x; b.y = Math.max(-1, p.y - 1); if (this.tile(b.x, b.y) !== T.EMPTY && b.y >= 0) b.y = p.y;
+      b.px = b.x; b.py = b.y; b.goal = null; this.say('Pop! Found you!');
+      this.ev.push({ type: 'drill', x: b.x, y: b.y });
+    }
+    // creatures near Pip?
+    let foe = null;
+    if (st.bfight > 0) {
+      let fd = 5;
+      for (const c of this.creatures) { if (c.dead || !c.awake) continue; const d = md(c, b); if (d < fd) { fd = d; foe = c; } }
+    }
+    const pursue = () => {
+      b.goalT -= dt;
+      const g = b.goal, gt = this.tile(g.x, g.y);
+      const r = this.goTo(b, g.x, g.y, bp, st.buddyRate, bs, 'b');
+      const reached = r === 'here' || (g.kind !== 'cmd' && C_passable(gt) && md(b, g) <= 1 && r !== 'path');
+      if (reached || b.goalT <= 0 || this.tile(g.x, g.y) === T.WALL) {
+        if (g.kind === 'cmd' && reached) this.say('Done! Back to exploring!');
+        b.goal = null; b.restT = 1.2 + Math.random() * 2;
+      }
+    };
+    if (b.goal && b.goal.kind === 'cmd') pursue();
+    else if (foe) {
+      b.goal = null;
+      if (md(foe, b) > 1) this.goTo(b, foe.x, foe.y, bp, st.buddyRate, bs, 'b');
+    } else if (b.goal) pursue();
+    else if (b.restT > 0) {
+      if (b.swingCd <= 0) { // dig a block next to him
+        let best = null, bsc = 0;
+        for (const [dx, dy] of [[0, 1], [-1, 0], [1, 0], [0, -1]]) {
+          const x = b.x + dx, y = b.y + dy, t = this.tile(x, y);
+          if (t === T.WALL || C_passable(t) || y < 0) continue;
+          let sc = { 1: 3, 2: st.sniff > 0 ? 12 : 3.5, 3: 0.5, 4: 8, 5: 12, 6: st.gasMult < 0.5 ? 2 : -1 }[t] || 0;
+          sc += Math.random() * 2;
+          if (!this.nearSeen(x, y, 3)) sc -= 4;
+          if (sc > bsc) { bsc = sc; best = { dx, dy }; }
+        }
+        if (best) this.tryDir(b, best.dx, best.dy, bp, st.buddyRate, bs, 'b'); else b.restT = 0;
+      }
+    } else {
+      // pick something to do: smelled ore first, otherwise a random spot nearby
+      const leash = this.buddyLeash(), far = dist > leash;
+      let target = null;
+      if (st.sniff > 0 && !far) {
+        const R = 2 + st.sniff + (st.gemhunt ? 4 : 0);
+        let bd = 99;
+        for (let y = Math.max(0, b.y - R); y <= b.y + R; y++) for (let x = 0; x < W; x++) {
+          const t = this.tile(x, y);
+          if (t !== T.ORE && t !== T.CHEST) continue;
+          const d = Math.abs(x - b.x) + Math.abs(y - b.y);
+          if (d > R || d >= bd || md({ x, y }, p) > leash + 2) continue;
+          if (!st.gemhunt && !this.nearSeen(x, y, 2)) continue;
+          bd = d; target = { x, y, kind: 'ore' };
+        }
+        if (target && this.bagN >= st.capacity) target = null;
+      }
+      if (!target) {
+        const cx = far ? p.x : b.x, cy = far ? p.y : b.y;
+        for (let i = 0; i < 10 && !target; i++) {
+          const x = cx + Math.round((Math.random() * 2 - 1) * 4), y = cy + Math.round((Math.random() * 2 - 1) * 3);
+          if (x < 0 || x >= W || y < 0 || (x === b.x && y === b.y)) continue;
+          if (md({ x, y }, p) > leash && !far) continue;
+          if (!this.nearSeen(x, y, 2)) continue;
+          target = { x, y, kind: 'wander' };
+        }
+      }
+      if (target) { b.goal = target; b.goalT = target.kind === 'ore' ? 6 : 4; }
+      else b.restT = 1;
+    }
+    if (st.drill) {
+      b.drillCd -= dt;
+      if (b.drillCd <= 0) {
+        b.drillCd = 8;
+        for (let k = 1; k <= 3; k++) { const t = this.tile(b.x, b.y + k); if (t !== T.WALL && !C_passable(t)) this.hitBlock(b.x, b.y + k, bp * 30, 'b'); }
+        this.ev.push({ type: 'drill', x: b.x, y: b.y });
+      }
+    }
+    if (st.bfight > 0 && b.atkCd <= 0) {
+      for (const c of this.creatures) {
+        if (c.dead) continue;
+        if (md(c, b) <= 1) { b.atkCd = 1 / st.attack; this.ev.push({ type: 'attack', who: 'b', x: c.x, y: c.y }); this.hitCreature(c, st.weapon * st.bfight); break; }
+      }
+    }
+    b.idleT += dt;
+    if (b.idleT > 9) { b.idleT = 0; if (Math.random() < 0.6) this.say(this.pick('idle')); }
+  }
   lightR() { return this.st.light + (this.flareT > 0 ? 5 : 0); }
 
   /* --- main step --- */
@@ -459,58 +561,8 @@ class World {
       }
     }
 
-    // buddy
-    const bp = st.power * st.buddyRatio, bs = st.move * 0.95;
-    const dist = Math.abs(b.x - p.x) + Math.abs(b.y - p.y);
-    if (dist > 12) { b.x = p.x; b.y = p.y; b.px = b.x; b.py = b.y; b.goal = null; this.say('Wait for me!'); }
-    b.gemCd -= dt;
-    if (!b.goal && st.gemhunt && b.gemCd <= 0) {
-      b.gemCd = 1;
-      const R = Math.floor(this.lightR() + st.sniff); let best = null, bd = 99;
-      for (let y = p.y - R; y <= p.y + R; y++) for (let x = 0; x < W; x++) {
-        if (y < 0) continue;
-        const t = this.tile(x, y);
-        if (t !== T.ORE && t !== T.CHEST) continue;
-        if (Math.abs(x - p.x) + Math.abs(y - p.y) > R) continue;
-        const d = Math.abs(x - b.x) + Math.abs(y - b.y);
-        if (d < bd && d <= 6) { bd = d; best = { x, y }; }
-      }
-      if (best && this.bagN < st.capacity) { b.goal = best; b.goalT = 6; }
-    }
-    if (b.goal) {
-      b.goalT -= dt;
-      const gt = this.tile(b.goal.x, b.goal.y);
-      const r = this.goTo(b, b.goal.x, b.goal.y, bp, st.buddyRate, bs, 'b');
-      if (r === 'here' || b.goalT <= 0 || (passable(gt) && Math.abs(b.goal.x - b.x) + Math.abs(b.goal.y - b.y) <= 1 && r !== 'path')) b.goal = null;
-    } else if (dist > 2) {
-      let tx = p.x, ty = p.y;
-      this.goTo(b, tx, ty, bp, st.buddyRate, bs, 'b');
-    } else if (b.swingCd <= 0) {
-      let best = null, bsc = 0;
-      for (const [dx, dy] of [[0, 1], [-1, 0], [1, 0], [0, -1]]) {
-        const x = b.x + dx, y = b.y + dy, t = this.tile(x, y);
-        if (t === T.WALL || passable(t) || y < 0) continue;
-        let sc = { 1: 3, 2: 10, 3: 0.5, 4: 8, 5: 12, 6: st.gasMult < 0.5 ? 2 : -1 }[t] || 0;
-        if (dy > 0) sc += 2;
-        if (Math.abs(x - p.x) + Math.abs(y - p.y) > 3) sc -= 2;
-        if (sc > bsc) { bsc = sc; best = { dx, dy }; }
-      }
-      if (best) this.tryDir(b, best.dx, best.dy, bp, st.buddyRate, bs, 'b');
-    }
-    if (st.drill) {
-      b.drillCd -= dt;
-      if (b.drillCd <= 0) {
-        b.drillCd = 8;
-        for (let k = 1; k <= 3; k++) { const t = this.tile(b.x, b.y + k); if (t !== T.WALL && !passable(t)) this.hitBlock(b.x, b.y + k, bp * 30, 'b'); }
-        this.ev.push({ type: 'drill', x: b.x, y: b.y });
-      }
-    }
-    if (st.bfight > 0 && b.atkCd <= 0) {
-      for (const c of this.creatures) {
-        if (c.dead) continue;
-        if (Math.abs(c.x - b.x) + Math.abs(c.y - b.y) <= 1) { b.atkCd = 1 / st.attack; this.ev.push({ type: 'attack', who: 'b', x: c.x, y: c.y }); this.hitCreature(c, st.weapon * st.bfight); break; }
-      }
-    }
+    // buddy: Pip wanders the mine on his own (does NOT follow you), digging and fighting near himself
+    this.buddyStep(dt);
 
     // creatures
     const lr = this.lightR();
@@ -550,8 +602,6 @@ class World {
       if (s > this.lastStratum) { this.lastStratum = s; this.ev.push({ type: 'stratum', s }); this.say(this.pick('stratum'), true); }
     }
     if (!this.lowWarned && this.oil < st.oilMax * 0.25 && this.time > 3) { this.lowWarned = true; this.say(this.pick('lowoil'), true); this.ev.push({ type: 'lowoil' }); }
-    b.idleT += dt;
-    if (b.idleT > 9) { b.idleT = 0; if (Math.random() < 0.6) this.say(this.pick('idle')); }
     // reveal tiles
     const R = Math.ceil(lr);
     for (let y = Math.max(0, p.y - R); y <= p.y + R; y++) {

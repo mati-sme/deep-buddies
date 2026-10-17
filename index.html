@@ -34,10 +34,7 @@
       <button id="btnFlare" class="abil hidden" aria-label="Flare">✨<i></i></button>
       <button id="btnCmd" class="abil" aria-label="Tell Pip where to dig" title="Tell Pip where to dig">🐾</button>
     </div>
-    <div id="dpad">
-      <button data-d="up" aria-label="Up">▲</button><button data-d="left" aria-label="Left">◀</button>
-      <button data-d="right" aria-label="Right">▶</button><button data-d="down" aria-label="Down">▼</button>
-    </div>
+    <div id="joy" class="hidden"><div class="ring"></div><div class="knob"></div></div>
     <div id="hint" style="opacity:0"></div>
   </div>
 
@@ -73,10 +70,10 @@
     <section id="tab-set" class="tab hidden">
       <div class="card settings">
         <h2>❓ How to play</h2>
-        <p>⬅️➡️⬆️⬇️ / WASD or tap a block: walk and dig. Pip the mole digs next to you and fights monsters with you.</p>
+        <p>👆 Touch anywhere and drag: a joystick appears and you walk and dig that way. Short tap a block: go dig it. ⌨️ Arrows / WASD on a keyboard.</p><p>🐾 Pip the mole explores the mine on his own: he digs, finds ore and fights monsters near him. Tap 🐾 then tap a spot to send him there.</p>
         <p>🏮 Your lantern runs out of oil. Grab 🫙 oil flasks, dig deep, find shiny ore 💎, then sell it at camp.</p>
         <p>🛤️ Spend coins on the Upgrade Map. 🗿 At 100 m you can Cave-in for Relics and evolve Pip on the Relic Map.</p>
-        <p>💨 Watch out for green gas rocks, water and lava. 🐾 button: tap it, then tap a spot to send Pip there.</p>
+        <p>💨 Watch out for green gas rocks, water and lava.</p>
         <h2>💾 Save</h2>
         <p class="small">Saved on this device automatically.</p>
         <div class="row"><button id="btnExport" class="btn">📤 Export</button><button id="btnImport" class="btn">📥 Import</button></div>

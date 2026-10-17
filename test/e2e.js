@@ -19,18 +19,48 @@ const OUT = process.env.OUT || '/tmp';
   await page.click('#btnDig', { force: true });
   await page.waitForTimeout(300);
   ok(await page.evaluate(() => window.__db.mode === 'run'), 'run started');
-  const dp = await page.$('#dpad [data-d=down]');
-  const box = await dp.boundingBox();
-  await page.mouse.move(box.x + 20, box.y + 20); await page.mouse.down(); await page.waitForTimeout(1500); await page.mouse.up();
-  const y1 = await page.evaluate(() => window.__db.world.player.y);
-  ok(y1 >= 1, 'dpad dig moved player down to y=' + y1);
+  ok((await page.$('#dpad')) === null, 'no on-screen d-pad');
+  ok(await page.evaluate(() => document.getElementById('joy').classList.contains('hidden')), 'joystick invisible when idle');
+  // touch-drag joystick (real touch events through CDP)
+  const cdp = await ctx.newCDPSession(page);
+  const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+  const yBefore = await page.evaluate(() => window.__db.world.player.y);
+  await touch('touchStart', 200, 600);
+  for (let i = 1; i <= 8; i++) { await touch('touchMove', 200, 600 + i * 10); await page.waitForTimeout(20); }
+  const joyVis = await page.evaluate(() => !document.getElementById('joy').classList.contains('hidden'));
+  for (let i = 0; i < 25; i++) { await touch('touchMove', 200 + (i % 2), 680); await page.waitForTimeout(60); }
+  const mid = await page.evaluate(() => ({ y: window.__db.world.player.y, goal: window.__db.world.player.goal }));
+  await touch('touchEnd');
+  await page.waitForTimeout(100);
+  ok(joyVis, 'joystick ring shows while dragging');
+  ok(mid.y >= yBefore + 1, `touch-drag down moved/dug player: y ${yBefore} -> ${mid.y}`);
+  ok(mid.goal === null, 'drag did not start tap-to-dig pathing');
+  ok(await page.evaluate(() => document.getElementById('joy').classList.contains('hidden')), 'joystick hidden after release');
+  // drag sideways
+  const xBefore = await page.evaluate(() => window.__db.world.player.x);
+  await touch('touchStart', 150, 500);
+  for (let i = 1; i <= 8; i++) { await touch('touchMove', 150 + i * 10, 502); await page.waitForTimeout(20); }
+  for (let i = 0; i < 20; i++) { await touch('touchMove', 230, 502 + (i % 2)); await page.waitForTimeout(60); }
+  await touch('touchEnd');
+  const xAfter = await page.evaluate(() => window.__db.world.player.x);
+  ok(xAfter > xBefore, `touch-drag right moved/dug player: x ${xBefore} -> ${xAfter}`);
+  // short tap with paw mode: commands Pip, not the player
+  await page.click('#btnCmd', { force: true });
+  await touch('touchStart', 100, 700); await page.waitForTimeout(60); await touch('touchEnd');
+  await page.waitForTimeout(50);
+  const cmd = await page.evaluate(() => ({ b: window.__db.world.buddy.goal, p: window.__db.world.player.goal, on: document.getElementById('btnCmd').classList.contains('on') }));
+  ok(cmd.b && cmd.b.kind === 'cmd' && !cmd.p && !cmd.on, 'short tap in 🐾 mode sends Pip: ' + JSON.stringify(cmd.b));
+  // short tap without paw mode: tap-to-dig goal
+  await touch('touchStart', 300, 650); await page.waitForTimeout(60); await touch('touchEnd');
+  await page.waitForTimeout(30);
+  ok(await page.evaluate(() => !!window.__db.world.player.goal || window.__db.world.ended), 'short tap sets a dig target');
   await page.evaluate(() => { window.__bot = setInterval(() => { const w = window.__db.world; if (w && !w.ended) window.__db.C.botThink(w); }, 30); });
   await page.waitForTimeout(3500);
   await page.screenshot({ path: OUT + '/db-run.png' });
   await page.waitForFunction(() => !document.getElementById('summary').classList.contains('hidden'), null, { timeout: 30000 });
   await page.screenshot({ path: OUT + '/db-summary.png' });
   const s1 = await page.evaluate(() => ({ coins: window.__db.save.coins, runs: window.__db.save.runs, best: window.__db.save.bestDepth }));
-  ok(s1.runs === 1 && s1.coins > 0, 'run 1 done: ' + JSON.stringify(s1));
+  ok(s1.runs === 1 && s1.best > 0, 'run 1 done (most of its 10 s spent on joystick checks): ' + JSON.stringify(s1));
   await page.click('#sumMap', { force: true });
   await page.waitForTimeout(400);
   // buy tank
@@ -77,7 +107,15 @@ const OUT = process.env.OUT || '/tmp';
   await dpage.goto(URL, { waitUntil: 'load' }); await dpage.waitForTimeout(500);
   await dpage.click('#btnDig', { force: true }); await dpage.keyboard.down('ArrowDown'); await dpage.waitForTimeout(2000); await dpage.keyboard.up('ArrowDown');
   const dy = await dpage.evaluate(() => window.__db.world.player.y);
-  ok(dy >= 1, 'keyboard dig works (y=' + dy + ')');
+  ok(dy >= 1, 'desktop keyboard dig works (y=' + dy + ')');
+  // mouse drag joystick on desktop
+  const dy0 = await dpage.evaluate(() => window.__db.world.player.y);
+  await dpage.mouse.move(640, 400); await dpage.mouse.down(); await dpage.mouse.move(640, 470, { steps: 8 });
+  let dug = false;
+  for (let i = 0; i < 16; i++) { await dpage.waitForTimeout(100); const st = await dpage.evaluate(() => { const p = window.__db.world.player; return !!(p.dig && p.dig.y === p.y + 1); }); dug = dug || st; }
+  await dpage.mouse.up();
+  const dy1 = await dpage.evaluate(() => window.__db.world.player.y);
+  ok(dy1 > dy0 || dug, `desktop mouse-drag joystick digs/moves down (y ${dy0} -> ${dy1}, digging below: ${dug})`);
   await dpage.screenshot({ path: OUT + '/db-desktop.png' });
   ok(errors.length === 0, 'no console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();

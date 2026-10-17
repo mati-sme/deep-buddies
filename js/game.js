@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 const D = window.DBData, C = window.DBCore, S = window.DBSprites, A = window.DBAudio, M = window.DBMaps;
-const VERSION = 'v1';
+const VERSION = 'v2';
 const KEY = 'deep-buddies-save-v1';
 const $ = (id) => document.getElementById(id);
 const fmt = C.fmt;
@@ -19,8 +19,7 @@ const R = new window.DBRenderer(cv);
 let mode = 'camp';
 let world = null, preview = null;
 let cmdMode = false;
-const keys = []; const dpad = { x: 0, y: 0 };
-let pointerDown = false;
+const keys = [];
 let hintT = 0;
 
 function newPreview() {
@@ -29,7 +28,7 @@ function newPreview() {
   R.camY = null; R.bubble = null; R.campView = true;
 }
 const isTouch = ('ontouchstart' in window) || (window.matchMedia && matchMedia('(pointer: coarse)').matches);
-if (!isTouch) document.body.classList.add('nodpad');
+if (!isTouch) document.body.classList.add('nodpad'); // desktop: hint sits lower
 
 /* ---------- toast & hint ---------- */
 let toastT = null;
@@ -49,9 +48,9 @@ function startRun() {
   $('btnDyn').classList.toggle('hidden', !world.st.dyn);
   $('btnFlare').classList.toggle('hidden', !world.st.flare);
   $('btnCmd').classList.remove('on');
-  if (save.runs === 0) hint(isTouch ? 'Tap a block (or use the arrows) to dig! ⛏️' : 'Arrow keys / WASD or click a block to dig! ⛏️', 6);
+  if (save.runs === 0) hint(isTouch ? 'Touch and drag anywhere to walk and dig! 👆⛏️' : 'Arrow keys / WASD (or drag the mouse) to dig! ⛏️', 6);
   else if (save.runs === 1) hint('Dig down 🔽 and grab shiny ore before the lantern goes out! 🏮', 5);
-  else if (save.runs === 3) hint('🐾 Tap the paw, then tap a spot: Pip digs there!', 5);
+  else if (save.runs === 3) hint('🐾 Pip explores on his own! Tap the paw, then a spot, to send him there.', 5);
 }
 function finishRun() {
   const res = world.result();
@@ -101,33 +100,58 @@ window.addEventListener('keydown', (e) => {
   } else if (mode === 'camp' && e.key === 'Enter' && !$('camp').classList.contains('hidden') && curTab === 'home') startRun();
 });
 window.addEventListener('keyup', (e) => { const i = keys.indexOf(e.key); if (i >= 0) keys.splice(i, 1); });
-window.addEventListener('blur', () => { keys.length = 0; dpad.x = dpad.y = 0; });
+window.addEventListener('blur', () => { keys.length = 0; });
 function inputDir() {
-  if (dpad.x || dpad.y) return { x: dpad.x, y: dpad.y };
+  const j = joyDir(); if (j) return j;
   if (keys.length) { const k = KEYMAP[keys[keys.length - 1]]; return { x: k[0], y: k[1] }; }
   return null;
 }
-document.querySelectorAll('#dpad button').forEach((b) => {
-  const d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[b.dataset.d];
-  const on = (e) => { e.preventDefault(); A.init(); dpad.x = d[0]; dpad.y = d[1]; b.classList.add('on'); try { b.setPointerCapture(e.pointerId); } catch (_) {} };
-  const off = () => { if (dpad.x === d[0] && dpad.y === d[1]) { dpad.x = 0; dpad.y = 0; } b.classList.remove('on'); };
-  b.addEventListener('pointerdown', on); b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
-});
-function canvasTile(e) { const r = cv.getBoundingClientRect(); return R.tileAt(e.clientX - r.left, e.clientY - r.top); }
-cv.addEventListener('pointerdown', (e) => {
-  A.init();
-  if (mode !== 'run' || !world) return;
-  const t = canvasTile(e);
+/* floating joystick: touch/drag anywhere on the play area. Short tap (no drag) = tap action. */
+const JOY_DEAD = 14, JOY_R = 56;
+let joy = null;
+function canvasTileAt(cx, cy) { const r = cv.getBoundingClientRect(); return R.tileAt(cx - r.left, cy - r.top); }
+function joyShow() {
+  const el = $('joy'), ar = $('app').getBoundingClientRect();
+  el.classList.remove('hidden');
+  el.style.left = (joy.x0 - ar.left) + 'px'; el.style.top = (joy.y0 - ar.top) + 'px';
+  let dx = joy.x - joy.x0, dy = joy.y - joy.y0; const d = Math.hypot(dx, dy);
+  if (d > JOY_R) { dx *= JOY_R / d; dy *= JOY_R / d; }
+  el.querySelector('.knob').style.transform = `translate(${dx}px, ${dy}px)`;
+}
+function joyDir() {
+  if (!joy || !joy.active) return null;
+  const dx = joy.x - joy.x0, dy = joy.y - joy.y0;
+  if (Math.hypot(dx, dy) < JOY_DEAD) return null;
+  if (Math.abs(dx) > Math.abs(dy) * 1.15) return { x: Math.sign(dx), y: 0 };
+  return { x: 0, y: Math.sign(dy) };
+}
+function tapAction(cx, cy) {
+  const t = canvasTileAt(cx, cy);
   if (t.x < 0 || t.x >= D.W || t.y < -1) return;
   if (cmdMode) { world.commandBuddy(t.x, Math.max(0, t.y)); toggleCmd(false); return; }
-  pointerDown = true; world.player.goal = { x: t.x, y: t.y }; world.player.goalT = 10;
+  world.player.goal = { x: t.x, y: t.y }; world.player.goalT = 6; // short tap: go dig that block
+}
+cv.addEventListener('pointerdown', (e) => {
+  A.init();
+  if (mode !== 'run' || !world || joy) return;
+  e.preventDefault();
+  joy = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, active: false };
+  try { cv.setPointerCapture(e.pointerId); } catch (_) {}
 });
 cv.addEventListener('pointermove', (e) => {
-  if (!pointerDown || mode !== 'run' || !world) return;
-  const t = canvasTile(e);
-  if (t.x >= 0 && t.x < D.W && t.y >= -1) { world.player.goal = { x: t.x, y: t.y }; world.player.goalT = 10; }
+  if (!joy || e.pointerId !== joy.id) return;
+  joy.x = e.clientX; joy.y = e.clientY;
+  if (!joy.active && Math.hypot(joy.x - joy.x0, joy.y - joy.y0) > JOY_DEAD) { joy.active = true; if (world) world.player.goal = null; }
+  if (joy.active) joyShow();
 });
-window.addEventListener('pointerup', () => { pointerDown = false; });
+function joyEnd(e, cancel) {
+  if (!joy || e.pointerId !== joy.id) return;
+  if (!joy.active && !cancel && mode === 'run' && world) tapAction(joy.x0, joy.y0);
+  joy = null; $('joy').classList.add('hidden');
+}
+cv.addEventListener('pointerup', (e) => joyEnd(e, false));
+cv.addEventListener('pointercancel', (e) => joyEnd(e, true));
+cv.addEventListener('lostpointercapture', (e) => joyEnd(e, true));
 function useDyn() { if (world && world.useDynamite()) A.SFX.boom(); }
 function useFlare() { if (world && world.useFlare()) A.SFX.flare(); }
 function toggleCmd(v) { cmdMode = v === undefined ? !cmdMode : v; $('btnCmd').classList.toggle('on', cmdMode); if (cmdMode) hint('Tap where Pip should dig! 🐾', 2.5); }
