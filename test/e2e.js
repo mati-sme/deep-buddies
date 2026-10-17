@@ -1,0 +1,84 @@
+// Headless test: load, play a run (bot), buy upgrade, prestige, reload save. node test/e2e.js [url]
+const { chromium } = require('playwright-core');
+const URL = process.argv[2] || 'http://localhost:8765/';
+const OUT = process.env.OUT || '/tmp';
+(async () => {
+  const browser = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--autoplay-policy=no-user-gesture-required'] });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+  const ok = (c, msg) => { console.log((c ? 'PASS ' : 'FAIL ') + msg); if (!c) process.exitCode = 1; };
+  const r = await page.goto(URL, { waitUntil: 'load' });
+  ok(r.status() === 200, 'page 200');
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: OUT + '/db-camp.png' });
+  ok(await page.isVisible('#btnDig'), 'dig button visible');
+  // run 1: real input (tap the block below the miner a few times, use dpad), then bot
+  await page.click('#btnDig', { force: true });
+  await page.waitForTimeout(300);
+  ok(await page.evaluate(() => window.__db.mode === 'run'), 'run started');
+  const dp = await page.$('#dpad [data-d=down]');
+  const box = await dp.boundingBox();
+  await page.mouse.move(box.x + 20, box.y + 20); await page.mouse.down(); await page.waitForTimeout(1500); await page.mouse.up();
+  const y1 = await page.evaluate(() => window.__db.world.player.y);
+  ok(y1 >= 1, 'dpad dig moved player down to y=' + y1);
+  await page.evaluate(() => { window.__bot = setInterval(() => { const w = window.__db.world; if (w && !w.ended) window.__db.C.botThink(w); }, 30); });
+  await page.waitForTimeout(3500);
+  await page.screenshot({ path: OUT + '/db-run.png' });
+  await page.waitForFunction(() => !document.getElementById('summary').classList.contains('hidden'), null, { timeout: 30000 });
+  await page.screenshot({ path: OUT + '/db-summary.png' });
+  const s1 = await page.evaluate(() => ({ coins: window.__db.save.coins, runs: window.__db.save.runs, best: window.__db.save.bestDepth }));
+  ok(s1.runs === 1 && s1.coins > 0, 'run 1 done: ' + JSON.stringify(s1));
+  await page.click('#sumMap', { force: true });
+  await page.waitForTimeout(400);
+  // buy tank
+  await page.evaluate(() => { window.__db.save.coins = Math.max(window.__db.save.coins, 50); });
+  await page.click('#upMap .node.br-lamp >> nth=0', { force: true });
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: OUT + '/db-map.png' });
+  await page.click('#buyUp', { force: true });
+  const tank = await page.evaluate(() => window.__db.save.up.tank || 0);
+  ok(tank === 1, 'bought Bigger Oil Tank');
+  // second run with longer oil, also test tap-to-dig
+  await page.click('.tabs button[data-tab=home]', { force: true });
+  await page.click('#btnDig', { force: true });
+  await page.waitForTimeout(300);
+  const oilMax = await page.evaluate(() => window.__db.world.st.oilMax);
+  ok(oilMax === 12, 'upgrade applied (oil ' + oilMax + ')');
+  await page.waitForFunction(() => !document.getElementById('summary').classList.contains('hidden'), null, { timeout: 40000 });
+  await page.click('#sumDig', { force: true });
+  await page.waitForTimeout(200);
+  await page.click('#btnSurface', { force: true });
+  await page.waitForFunction(() => !document.getElementById('summary').classList.contains('hidden'), null, { timeout: 10000 });
+  await page.click('#sumMap', { force: true });
+  // prestige: fake a deep shaft
+  await page.evaluate(() => { const s = window.__db.save; s.bestDepth = 130; s.bestEver = Math.max(130, s.bestEver); s.coinsShaft = 1e6; window.__db.persist(); window.__db.showTab('relic'); });
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: OUT + '/db-relic.png' });
+  await page.click('#btnCave', { force: true });
+  await page.click('#cYes', { force: true });
+  await page.waitForTimeout(500);
+  const s2 = await page.evaluate(() => ({ relics: window.__db.save.relics, caveIns: window.__db.save.caveIns, tank: window.__db.save.up.tank || 0, coins: window.__db.save.coins }));
+  ok(s2.caveIns === 1 && s2.relics > 0 && s2.tank === 0, 'cave-in: ' + JSON.stringify(s2));
+  await page.click('#prMap .node >> nth=0', { force: true });
+  await page.click('#buyPr', { force: true });
+  const pv = await page.evaluate(() => window.__db.save.pr.p_value || 0);
+  ok(pv === 1, 'bought relic node Ancient Lore');
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(600);
+  const s3 = await page.evaluate(() => ({ relics: window.__db.save.relics, caveIns: window.__db.save.caveIns, pv: window.__db.save.pr.p_value, runs: window.__db.save.runs }));
+  ok(s3.caveIns === 1 && s3.pv === 1 && s3.runs === 3, 'save survived reload: ' + JSON.stringify(s3));
+  // desktop check with keyboard
+  const dpage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  dpage.on('console', (m) => { if (m.type() === 'error') errors.push('desktop console: ' + m.text()); });
+  dpage.on('pageerror', (e) => errors.push('desktop pageerror: ' + e.message));
+  await dpage.goto(URL, { waitUntil: 'load' }); await dpage.waitForTimeout(500);
+  await dpage.click('#btnDig', { force: true }); await dpage.keyboard.down('ArrowDown'); await dpage.waitForTimeout(2000); await dpage.keyboard.up('ArrowDown');
+  const dy = await dpage.evaluate(() => window.__db.world.player.y);
+  ok(dy >= 1, 'keyboard dig works (y=' + dy + ')');
+  await dpage.screenshot({ path: OUT + '/db-desktop.png' });
+  ok(errors.length === 0, 'no console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+  await browser.close();
+})().catch((e) => { console.error(e); process.exit(1); });

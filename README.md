@@ -1,0 +1,21 @@
+# Deep Buddies ⛏️🐾
+
+A cozy pixel mining game for phone and desktop. You dig down a lantern-lit mine with **Pip the mole**. Grab ore before your lantern runs out, then spend the coins on a mine-cart **Upgrade Map**. Once a shaft is deep enough, a **Cave-in** gives you Relics for the **Relic Map**, where Pip evolves.
+
+Play: https://mati-sme.github.io/deep-buddies/
+
+## How it plays
+- **Timed runs.** Every run lasts as long as your lantern oil: 10 s at first, about 1–2 minutes later on. Oil flasks in the rock give some back. Monsters, gas pockets and lava burn oil. When the oil is gone you go back up and sell what you carried.
+- **Moving and digging.** Use the arrow keys or WASD, the on-screen d-pad, or tap/click a block. Tapping a far block walks there and digs a path to it. Which way you dig matters: ore veins and treasure chests are worth a lot, hard boulders slow you down, green gas rocks explode, water slows you and lava burns.
+- **Pip the buddy** follows you, digs blocks next to you (he goes for ore first), chatters in speech bubbles, and can be sent somewhere: tap 🐾, then tap a spot. Upgrades teach him Ore Sniffing (ore sparkles in the dark), Gem Hunter (he runs off to dig ore on his own), Brave Buddy (he fights) and Dynamite.
+- **Cave creatures** (bats, slimes, beetles, spiders, imps, golems...) wake up when your light reaches them and bite away your oil. Your weapon hits them automatically when they get close, so swords and armor matter.
+- **Upgrade Map** (52 nodes on mine-cart rails). It has six branches: Pickaxe tiers (Wooden → Heartforge), Weapon tiers (Stick → Star Saber), Lantern (oil, light, flare), Gear (boots, backpack, armor, gas mask, heat boots, helmet, gloves), Buddy, and Loot. You only ever buy upgrades. There are no helpers to buy over and over.
+- **Cave-in (prestige).** Once you reach 100 m in a shaft, a cave-in resets coins, upgrades and shaft depth. In return you get Relics, roughly (depth)³. You spend them on the **Relic Map** (17 nodes), which shows a constellation over geological layers. It has permanent buffs, the Elevator, the Gear Locker, Auto-buy, and **four buddy evolutions**: Drill Pip (drills straight down), Crystal Pip (sees ore far away), Ember Pip (burns monsters, walks through lava) and Star Pip (glows in the dark).
+- **Saves** go to localStorage on each device (autosave every 10 s, after runs and after purchases). You can move a save with export/import.
+
+## Tech
+Vanilla JS with no build step. Canvas renderer with procedural pixel art, darkness and a lantern light radius, particles and screen shake. Sound is made with WebAudio (no audio files) and can be muted. It is an installable PWA: `sw.js` caches the game cache-first, and its `CACHE` name must be bumped on every release.
+
+- `js/data.js` holds the strata, ores, creatures, upgrade map and relic map. `js/core.js` holds the economy and the world simulation, with no DOM, so Node can use it too.
+- `node sim/pacing.js [minutesPerDay] [maxDays]` runs a pacing simulation: a bot plays real runs through the same `World` class the game uses. Results are in `SIM_RESULTS.md`.
+- `node test/e2e.js [url]` is a headless Chrome test. It loads the game, digs with the d-pad and the keyboard, plays a run, buys an upgrade, does a cave-in, buys a relic node and checks that the save survives a reload.
