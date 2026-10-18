@@ -124,6 +124,7 @@ const OUT = process.env.OUT || '/tmp';
     { name: 'phone-landscape-844x390', width: 844, height: 390, dpr: 3, touch: true }
   ]) await landscape(browser, vp, ok, errors);
   ok(errors.length === 0, 'no console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
+  await require('./ads.js').adsSuite(browser, URL, ok, process.env.ADS_SHOT);
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });
 

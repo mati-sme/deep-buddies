@@ -3,7 +3,7 @@
 const CACHE = 'deep-buddies-v3';
 const ASSETS = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
-  'js/data.js', 'js/core.js', 'js/sprites.js', 'js/audio.js', 'js/render.js', 'js/maps.js', 'js/game.js',
+  'js/ads.js', 'js/data.js', 'js/core.js', 'js/sprites.js', 'js/audio.js', 'js/render.js', 'js/maps.js', 'js/game.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'
 ];
 self.addEventListener('install', (event) => {

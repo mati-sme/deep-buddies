@@ -79,3 +79,6 @@ Landscape screens get a wider world (more columns). The same 45 min/day sim was 
 | 40 (max, ultrawide) | day 36.5 |
 
 The differences are within run-to-run noise. Runs go down, so extra columns add almost no reachable ore. Light radius is measured in tiles, so it doesn't change either. No rebalance was needed.
+
+## Reward ads (branch `rewarded-ads`)
+Pacing assumes **no ads**. The optional "2× coins" reward ad lives only in `js/game.js` and `js/ads.js`. The sim (`sim/pacing.js`, `C.applyRun`, `C.World`) never loads or calls it, so all numbers above are for a player who always says "No thanks". A player who accepts every offer earns up to 2× coins on runs 3 onward. That only speeds up the coin side (upgrades); relics come from depth, so cave-ins and Pip's evolutions are mostly unaffected.

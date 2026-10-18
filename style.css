@@ -210,3 +210,14 @@ body.big .modal .card { max-height: calc((100vh - 28px) / var(--z)); }
 body.big .home-card { max-height: calc((100% - 20px) / var(--z)); }
 body.big .node .nm { font-size: 12px; top: -20px; }
 body.big .node .lv { font-size: 12px; }
+
+/* ---------- optional reward-ad offer (summary) ---------- */
+.adoffer { margin: 10px 0 2px; padding: 10px; border-radius: 12px; background: rgba(0,0,0,.28); border: 2px dashed rgba(255,216,74,.45); }
+.adoffer .adtxt { font-size: 15px; line-height: 1.3; }
+.adoffer .row { margin-top: 8px !important; flex-wrap: nowrap !important; }
+.adoffer .row .btn { flex: 1 1 0; min-width: 0; font-size: 15px; padding: 9px 8px; }
+.sumtotal .x2 { font-size: 18px; background: #7dff8a; color: #06240c; border-radius: 8px; padding: 1px 6px; vertical-align: middle; text-shadow: none; }
+.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 800; margin: 6px 0; }
+.toggle input { width: 22px; height: 22px; }
+body.short .adoffer { margin: 4px 0 0; padding: 6px 8px; } body.short .adoffer .adtxt { font-size: 13px; } body.short .adoffer .row .btn { padding: 6px 8px; font-size: 14px; }
+.adoffer .adtxt .small { white-space: nowrap; }

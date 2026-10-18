@@ -2,7 +2,7 @@
 (function () {
 'use strict';
 const D = window.DBData, C = window.DBCore, S = window.DBSprites, A = window.DBAudio, M = window.DBMaps;
-const VERSION = 'v3';
+const VERSION = 'v3-ads';
 const KEY = 'deep-buddies-save-v1';
 const $ = (id) => document.getElementById(id);
 const fmt = C.fmt;
@@ -21,6 +21,7 @@ let world = null, preview = null;
 let cmdMode = false;
 const keys = [];
 let hintT = 0;
+let lastRes = null; // last run result (summary + reward-ad claim)
 
 function newPreview() {
   preview = new C.World(save, 12345, R.idealCols());
@@ -55,12 +56,18 @@ function startRun() {
 }
 function finishRun() {
   const res = world.result();
+  const bestBefore = save.bestRunCoins || 0;
   C.applyRun(save, res);
+  save.bestRunCoins = Math.max(bestBefore, res.total);
+  // optional reward ad (2x this run's coins); never on the first runs or for tiny runs, see js/ads.js CONFIG
+  res.runNo = save.runs;
+  res.adOffer = !!(window.Ads && window.Ads.shouldOffer({ enabled: save.adsOffer !== false, runsBefore: save.runs - 1, reward: res.total, best: bestBefore, claimed: save.adClaimRun === save.runs }));
   let auto = 0;
   if (save.autoBuy && C.plvl(save, 'p_auto')) auto = C.autoBuy(save);
   persist();
   mode = 'summary';
   A.SFX.end();
+  lastRes = res;
   setTimeout(() => showSummary(res, auto), 700);
 }
 function showSummary(res, auto) {
@@ -73,7 +80,8 @@ function showSummary(res, auto) {
   let html = `<h2>${reason}</h2><div class="small">Pip leads you back up the tunnel 🐾</div>`;
   if (res.record && res.depthMax > 0) html += `<div class="record">🏆 New record: ${res.depthMax} m!</div>`;
   html += rows.map((r) => `<div class="sumrow"><span>${r[0]}</span><span>🪙 ${fmt(r[1])}</span></div>`).join('');
-  html += `<div class="sumtotal">🪙 +${fmt(res.total)}</div>`;
+  html += `<div class="sumtotal" id="sumTotal">🪙 +${fmt(res.total)}</div>`;
+  if (res.adOffer) html += `<div class="adoffer" id="adOffer"><div class="adtxt" id="adTxt">🎬 Watch a short ad: <b>2× coins</b> this run <span class="small">(+🪙 ${fmt(res.total)})</span></div><div class="row"><button class="btn" id="adYes">🎬 Watch ad</button><button class="btn" id="adNo">No thanks</button></div></div>`;
   if (auto) html += `<div class="small">📒 Auto-bought ${auto} upgrades</div>`;
   const can = cheapestAffordable();
   html += `<div class="row"><button class="btn ${can ? 'go' : ''}" id="sumMap">🛤️ Upgrades${can ? ' ✨' : ''}</button><button class="btn" id="sumDig">⛏️ Dig again</button></div>`;
@@ -82,6 +90,30 @@ function showSummary(res, auto) {
   if (res.record) A.SFX.record(); else A.SFX.coin();
   $('sumMap').onclick = () => { closeSummary(); showTab('map'); };
   $('sumDig').onclick = () => { closeSummary(); startRun(); };
+  if (res.adOffer) {
+    $('adNo').onclick = () => { A.SFX.click(); $('adOffer').remove(); };
+    $('adYes').onclick = () => watchAd(res);
+  }
+}
+// Reward ad: double this run's coins. Applied only after the ad was watched to the end, at most once per run (saved).
+function watchAd(res) {
+  if (save.adClaimRun === res.runNo) return;
+  const yes = $('adYes'), no = $('adNo');
+  yes.disabled = no.disabled = true;
+  window.Ads.showRewarded('deep-buddies-run-end').then((r) => {
+    const card = $('adOffer');
+    if (r.rewarded && save.adClaimRun !== res.runNo && save.runs === res.runNo) {
+      save.adClaimRun = res.runNo;
+      save.coins += res.total; save.coinsShaft += res.total; save.coinsTotal += res.total;
+      persist();
+      if ($('sumTotal')) $('sumTotal').innerHTML = `🪙 +${fmt(res.total * 2)} <span class="x2">×2</span>`;
+      if (card) card.innerHTML = `<div class="adtxt">🎉 Bonus! You got 🪙 +${fmt(res.total)} extra. Thanks!</div>`;
+      A.SFX.record(); refreshCamp();
+    } else if (card) {
+      $('adTxt').innerHTML = '🙂 No bonus this time, and that\'s okay! You can try again or skip it.';
+      yes.disabled = no.disabled = false;
+    }
+  });
 }
 function closeSummary() {
   $('summary').classList.add('hidden');
@@ -323,6 +355,8 @@ function askCaveIn() {
 }
 
 /* ---------- settings ---------- */
+$('adsToggle').checked = save.adsOffer !== false;
+$('adsToggle').onchange = (e) => { save.adsOffer = e.target.checked; persist(); };
 $('btnExport').onclick = () => { $('saveBox').value = btoa(unescape(encodeURIComponent(JSON.stringify(save)))); $('saveBox').select(); };
 $('btnImport').onclick = () => {
   try { const s = C.fixSave(JSON.parse(decodeURIComponent(escape(atob($('saveBox').value.trim()))))); save = s; persist(); location.reload(); }
@@ -382,5 +416,5 @@ requestAnimationFrame(frame);
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
 // small hook for automated tests
-window.__db = { get save() { return save; }, get world() { return world; }, get mode() { return mode; }, get preview() { return preview; }, R, startRun, showTab, C, persist };
+window.__db = { get save() { return save; }, get world() { return world; }, get mode() { return mode; }, get preview() { return preview; }, R, startRun, showTab, C, persist, get lastRes() { return lastRes; }, watchAd };
 })();

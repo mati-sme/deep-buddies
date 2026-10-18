@@ -34,7 +34,8 @@ const stratumOf = (y) => Math.max(0, Math.floor(y / CHUNK));
 /* ---------- save ---------- */
 function newSave() {
   return { v: 1, coins: 0, up: {}, relics: 0, pr: {}, bestDepth: 0, bestEver: 0, runs: 0, caveIns: 0,
-    coinsShaft: 0, coinsTotal: 0, relicsTotal: 0, muted: false, autoBuy: false, playTime: 0, seed: 1, seenIntro: false };
+    coinsShaft: 0, coinsTotal: 0, relicsTotal: 0, muted: false, autoBuy: false, playTime: 0, seed: 1, seenIntro: false,
+    adsOffer: true, adClaimRun: 0, bestRunCoins: 0 }; // reward-ad fields (game.js only; the sim never touches them)
 }
 function fixSave(s) {
   const n = newSave();
