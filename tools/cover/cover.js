@@ -152,19 +152,61 @@ function sparkle(L, x0, y0, n, col) {
   if (n > 2) L.rect(col, x0 - 1, y0 - 1, 3, 3).rect('#ffffff', x0, y0, 1, 1);
 }
 /* title: pixel font, hard edges, 3-band glossy fill, thick outline, hard drop shadow */
+// The title is pixel art authored here (not a font): 2 px strokes, caps 10 rows, x-height 7, descender 3, so every
+// counter (the e, B, p, d holes) is at least 3x2 and stays open at any cover size.
+const GLYPHS = {
+  D: ['#####..', '######.', '##..###', '##...##', '##...##', '##...##', '##...##', '##..###', '######.', '#####..'],
+  B: ['######.', '#######', '##...##', '##...##', '######.', '######.', '##...##', '##...##', '#######', '######.'],
+  e: ['.#####.', '##...##', '##...##', '#######', '##.....', '##...##', '.#####.'],
+  p: ['######.', '##...##', '##...##', '##...##', '##...##', '######.', '##.....', '##.....', '##.....'],
+  u: ['##...##', '##...##', '##...##', '##...##', '##...##', '##..###', '.###.##'],
+  d: ['.....##', '.....##', '.....##', '.######', '##...##', '##...##', '##...##', '##...##', '##..###', '.###.##'],
+  i: ['##', '##', '..', '##', '##', '##', '##', '##', '##', '##'],
+  s: ['.######', '##.....', '##.....', '.#####.', '.....##', '.....##', '######.'],
+};
+const CAP = 10; // rows above the baseline; lowercase without ascender start at row 3; p descends 3 rows
+function glyphRows(ch) { const g = GLYPHS[ch]; return { g, top: g.length >= CAP ? 0 : CAP - 7 }; }
+function lineCols(t) { let c = 0; for (const ch of t) c += ch === ' ' ? 4 : GLYPHS[ch][0].length + 1; return c - 1; }
 function title(W, H, text, cx, cy, size) {
   const T = new Layer(W, H), x = T.x, lines = Array.isArray(text) ? text : [text];
-  const fit = () => { x.font = `700 ${size}px "Pixelify Sans"`; return Math.max(...lines.map((l) => x.measureText(l).width)); };
-  while (fit() > W * 0.9 && size > 8) size--;
-  x.textAlign = 'center'; x.textBaseline = 'middle';
-  const mask = cnv(W, H), mx = mask.getContext('2d'); mx.font = x.font; mx.textAlign = 'center'; mx.textBaseline = 'middle'; mx.fillStyle = '#fff';
-  lines.forEach((l, i) => mx.fillText(l, cx, cy + (i - (lines.length - 1) / 2) * size * 0.95)); hard(mask);
-  const m = mask.getContext('2d').getImageData(0, 0, W, H).data;
-  let top = H, bot = 0; for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) if (m[(j * W + i) * 4 + 3]) { top = Math.min(top, j); bot = Math.max(bot, j); }
-  const n = lines.length, lh = (bot - top + 1) / n;
-  const band = (c, a, b) => { const t = cnv(W, H), tx = t.getContext('2d'); tx.drawImage(mask, 0, 0); tx.globalCompositeOperation = 'source-in'; tx.fillStyle = c; tx.beginPath(); for (let i = 0; i < n; i++) tx.rect(0, top + lh * i + lh * a, W, lh * (b - a) + 1); tx.fill(); x.drawImage(t, 0, 0); }; // one path: source-in clears outside each separate fill
-  band('#fff6c0', 0, 0.3); band('#ffd84a', 0.3, 0.62); band('#ff9a2a', 0.62, 1.01);
-  outline(T.c, '#5a2a04', 1); outline(T.c, '#1e1008', Math.max(1, Math.round(size / 16)));
+  const cols = Math.max(...lines.map(lineCols)), lineRows = CAP + 3 + 2;
+  const u = Math.max(1, Math.floor(Math.min(size / 9, (W * 0.9) / cols))); // one title pixel in canvas pixels
+  size = u * 9;
+  const mask = cnv(W, H), mx = mask.getContext('2d'); mx.fillStyle = '#fff';
+  const tops = [];
+  lines.forEach((l, li) => {
+    let X = Math.round(cx - (lineCols(l) * u) / 2);
+    const Y0 = Math.round(cy + (li - (lines.length - 1) / 2) * lineRows * u - (CAP * u) / 2); tops.push(Y0);
+    for (const ch of l) {
+      if (ch === ' ') { X += 4 * u; continue; }
+      const { g, top } = glyphRows(ch);
+      g.forEach((row, r) => { for (let c = 0; c < row.length; c++) if (row[c] === '#') mx.fillRect(X + c * u, Y0 + (top + r) * u, u, u); });
+      X += (g[0].length + 1) * u;
+    }
+  });
+  const lh = CAP * u; // glossy bands over each line's cap height (the last one also colours the p descender)
+  const band = (c, a, b) => { const t = cnv(W, H), tx = t.getContext('2d'); tx.drawImage(mask, 0, 0); tx.globalCompositeOperation = 'source-in'; tx.fillStyle = c; tx.beginPath(); for (const t0 of tops) tx.rect(0, t0 + lh * a, W, lh * (b - a) + 1); tx.fill(); x.drawImage(t, 0, 0); }; // one path: source-in clears outside each separate fill
+  band('#fff6c0', 0, 0.3); band('#ffd84a', 0.3, 0.62); band('#ff9a2a', 0.62, 1.35);
+  // Outline only the outer contour, so the counters (holes in e, B, p, d) stay open.
+  const td = x.getImageData(0, 0, W, H), ta = td.data, out = new Uint8Array(W * H), stack = [];
+  for (let i = 0; i < W; i++) stack.push(i, (H - 1) * W + i);
+  for (let j = 0; j < H; j++) stack.push(j * W, j * W + W - 1);
+  while (stack.length) { // flood the transparent area reachable from the edges = outside
+    const q = stack.pop(); if (out[q] || ta[q * 4 + 3]) continue; out[q] = 1;
+    const qx = q % W, qy = (q - qx) / W;
+    if (qx > 0) stack.push(q - 1); if (qx < W - 1) stack.push(q + 1); if (qy > 0) stack.push(q - W); if (qy < H - 1) stack.push(q + W);
+  }
+  const ring = cnv(W, H), rx = ring.getContext('2d'), rd = rx.createImageData(W, H);
+  for (let q = 0; q < W * H; q++) if (!out[q]) rd.data[q * 4 + 3] = 255; // text + holes, solid
+  rx.putImageData(rd, 0, 0);
+  outline(ring, '#5a2a04', 1); outline(ring, '#1e1008', Math.max(1, Math.round(size / 16)));
+  const rr = rx.getImageData(0, 0, W, H);
+  for (let q = 0; q < W * H; q++) if (!out[q]) rr.data[q * 4 + 3] = 0; // keep only the ring outside the letters
+  for (let q = 0; q < W * H; q++) if (!out[q] && !ta[q * 4 + 3]) { // counters: solid dark brown, so the scene doesn't show through
+    ta[q * 4] = 0x3a; ta[q * 4 + 1] = 0x1a; ta[q * 4 + 2] = 0x06; ta[q * 4 + 3] = 255;
+  }
+  x.putImageData(td, 0, 0);
+  rx.putImageData(rr, 0, 0); x.globalCompositeOperation = 'destination-over'; x.drawImage(ring, 0, 0); x.globalCompositeOperation = 'source-over';
   const S = new Layer(W, H); S.x.globalAlpha = 1; S.x.drawImage(T.c, 0, Math.max(2, Math.round(size / 9)));
   const sd = S.x.getImageData(0, 0, W, H); for (let i = 0; i < sd.data.length; i += 4) if (sd.data[i + 3]) { sd.data[i] = 20; sd.data[i + 1] = 8; sd.data[i + 2] = 4; sd.data[i + 3] = 200; } S.x.putImageData(sd, 0, 0);
   S.x.drawImage(T.c, 0, 0);
