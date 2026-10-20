@@ -17,13 +17,15 @@ const prMaxed = () => D.PRESTIGE.every((u) => C.plvl(save, u.id) >= u.u_max || C
 const firstRuns = [];
 let lastLog = -1;
 while (play < MAX_DAYS * MIN_PER_DAY * 60) {
-  const w = new C.World(save, seed++, +process.env.SIM_W || D.W);
+  const w = new C.World(save, seed++, +process.env.SIM_W || D.W, { tutorial: save.runs === 0 });
   while (!w.ended && w.time < 600) { C.botThink(w); w.step(DT, null); w.ev.length = 0; }
   const r = w.result();
   C.applyRun(save, r);
+  C.checkGoals(save, null);
   play += r.time + OVERHEAD; sinceCave++;
-  if (firstRuns.length < 8) firstRuns.push(`run ${save.runs}: ${r.time.toFixed(1)}s, depth ${r.depthMax}m, ore ${r.oreN}, coins ${r.total}`);
-  const bought = C.autoBuy(save); stale = bought ? 0 : stale + 1;
+  const coinsBefore = save.coins;
+  const bought = C.autoBuy(save); save.tally.buys += bought; C.checkGoals(save, null);
+  if (firstRuns.length < 10) firstRuns.push(`run ${save.runs}: ${r.time.toFixed(1)}s, depth ${r.depthMax}m, ore ${r.oreN}, chests ${r.chestsN} (Pip ${r.pipFound}), coins ${r.total}, bought ${bought} (had ${coinsBefore}), goal #${save.goal}`); stale = bought ? 0 : stale + 1;
   if (bought && !seen.has('up1')) once('up1', 'first upgrade bought');
   for (let s = 1; s < 22; s++) if (save.bestEver >= s * D.CHUNK) once('s' + s, `reached ${D.stratum(s).name} (${s * D.CHUNK} m)`);
   const gain = C.relicsFor(save);
