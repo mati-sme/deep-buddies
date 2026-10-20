@@ -168,6 +168,8 @@ const OUT = process.env.OUT || '/tmp';
     { name: 'ultrawide-2560x1080', width: 2560, height: 1080, dpr: 1, touch: false },
     { name: 'phone-landscape-844x390', width: 844, height: 390, dpr: 3, touch: true }
   ]) await landscape(browser, vp, ok, errors);
+  for (const vp of [{ name: 'embed-907x510', width: 907, height: 510 }, { name: 'embed-800x450', width: 800, height: 450 }]) await embed(browser, vp, ok, errors);
+  await lighting(browser, ok, errors);
   ok(errors.length === 0, 'no console errors' + (errors.length ? ': ' + errors.join(' | ') : ''));
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });
@@ -269,4 +271,52 @@ async function landscape(browser, vp, ok, errors) {
   bad = await fits(page, ['#caveCard', '#prMap', '#btnCave']);
   ok(bad.length === 0, P + 'relic map fits' + (bad.length ? ': ' + bad.join('; ') : ''));
   await ctx.close();
+}
+
+// CrazyGames embed sizes: the Upgrade Map fits every revealed node without dragging, labels stay readable,
+// the HUD goal chip doesn't run under the buttons.
+async function embed(browser, vp, ok, errors) {
+  const P = `[${vp.name}] `;
+  for (const [tag, save] of [['early', { v: 2, coins: 277, up: {}, runs: 1, tutDone: true, seenIntro: true, goal: 2, bestEver: 17, bestDepth: 17 }],
+    ['mid', { v: 2, coins: 2600, up: { sharpen: 14, pick1: 1, pick2: 1, pick3: 1, swing: 4, sword1: 1, sword2: 1, wtrain: 6, tank: 7, wick: 4, oilfind: 3, flare: 1, boots: 5, bag: 6, armor: 2, bdig: 8, bpow: 3, sniff: 4, bbag: 3, gemhunt: 1, veins: 4, chests: 2, appraise: 6 }, runs: 24, tutDone: true, seenIntro: true, goal: 12, bestEver: 62, bestDepth: 62 }]]) {
+    const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
+    await ctx.addInitScript((s) => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('deep-buddies-save-v1', JSON.stringify(s)); sessionStorage.setItem('seeded', 1); } }, save);
+    const page = await ctx.newPage();
+    page.on('console', (m) => { if (m.type() === 'error') errors.push(P + m.text()); }); page.on('pageerror', (e) => errors.push(P + e.message));
+    await page.goto(URL, { waitUntil: 'load' }); await page.waitForTimeout(600);
+    await page.evaluate(() => window.__db.showTab('map')); await page.waitForTimeout(400);
+    const m = await page.evaluate(() => {
+      const wr = document.getElementById('upMap'), inn = wr.querySelector('.map-inner'), z = parseFloat(inn.style.zoom) || 1, wb = wr.getBoundingClientRect();
+      const rs = [...inn.querySelectorAll('.node.v-show, .node.v-tease')].map((e) => e.getBoundingClientRect());
+      const lab = [...inn.querySelectorAll('.node.v-show:not(.nm-crowd) .nm')].map((e) => parseFloat(getComputedStyle(e).fontSize) * z);
+      return { n: rs.length, out: rs.filter((r) => r.left < wb.left - 1 || r.right > wb.right + 1).length, lab: lab.length ? Math.min(...lab) : 0, labels: lab.length };
+    });
+    ok(m.n > 5 && m.out === 0, P + `${tag}: all ${m.n} revealed map nodes fit without dragging`);
+    ok(m.labels > 4 && m.lab >= 10, P + `${tag}: ${m.labels} node labels, smallest ${m.lab.toFixed(1)} px on screen`);
+    if (tag === 'early') {
+      await page.evaluate(() => { window.__db.showTab('home'); window.__db.startRun(); }); await page.waitForTimeout(700);
+      const h = await page.evaluate(() => { const g = document.getElementById('goalChip').getBoundingClientRect(), b = document.querySelector('.hud-right').getBoundingClientRect(); return { gr: g.right, gb: g.bottom, bl: b.left, bb: b.bottom, gw: g.width }; });
+      ok((h.gr <= h.bl || h.gb > h.bb) && h.gw > 150, P + `goal chip clear of the HUD buttons (${Math.round(h.gw)} px wide)`);
+    }
+    await ctx.close();
+  }
+}
+// dives: dim, not black, outside the light on big screens; phones keep the classic dark
+async function lighting(browser, ok, errors) {
+  const res = {};
+  for (const [name, vp] of [['1920x1080', { viewport: { width: 1920, height: 1080 } }], ['phone', { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }]]) {
+    const ctx = await browser.newContext(vp);
+    await ctx.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { localStorage.setItem('deep-buddies-save-v1', JSON.stringify({ v: 2, runs: 3, tutDone: true, seenIntro: true, goal: 3 })); sessionStorage.setItem('seeded', 1); } });
+    const page = await ctx.newPage(); page.on('pageerror', (e) => errors.push('[lighting] ' + e.message));
+    await page.goto(URL, { waitUntil: 'load' }); await page.waitForTimeout(500);
+    await page.evaluate(() => window.__db.startRun()); await page.waitForTimeout(800);
+    res[name] = await page.evaluate(() => window.__db.R.lightView);
+    await page.evaluate(() => { window.__db.world.oil = 1; }); await page.waitForTimeout(200);
+    res[name].low = await page.evaluate(() => window.__db.R.lightView.amb);
+    await ctx.close();
+  }
+  const d = res['1920x1080'], p = res.phone;
+  ok(d.amb <= 0.85 && d.Rv > d.R0 * 1.15, `[lighting] 1080p: dim outside the light (dark ${d.amb.toFixed(2)}), lantern reach ${Math.round(d.Rv)} px vs gameplay ${Math.round(d.R0)} px`);
+  ok(d.low > d.amb + 0.05, `[lighting] 1080p: low oil darkens again (${d.amb.toFixed(2)} -> ${d.low.toFixed(2)})`);
+  ok(p.amb >= 0.96 && p.Rv <= p.R0 * 1.4, `[lighting] phone keeps the classic dark (dark ${p.amb.toFixed(2)}, reach ${Math.round(p.Rv)} vs ${Math.round(p.R0)} px)`);
 }
