@@ -358,20 +358,29 @@ class Renderer {
       d.globalCompositeOperation = 'source-over';
       d.clearRect(-50, -50, this.w + 100, this.h + 100);
       const top = Math.max(-30, surfY + ts * 0.9);
-      d.fillStyle = 'rgba(4,2,10,0.97)'; d.fillRect(-30, top, this.w + 60, this.h + 60);
-      if (surfY > -ts * 3) { const g = d.createLinearGradient(0, surfY, 0, surfY + ts * 3); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); d.globalCompositeOperation = 'destination-out'; d.fillStyle = g; d.fillRect(-30, top, this.w + 60, ts * 2.2); }
-      d.globalCompositeOperation = 'destination-out';
-      d.fillStyle = 'rgba(0,0,0,0.32)';
-      for (let y = Math.max(0, y0); y <= y1; y++) { const r = w.row(y); for (let x = this.xa; x <= this.xb; x++) if (r.seen[x]) d.fillRect(this.sx(x), this.sy(y), ts, ts); }
-      const light = (ax, ay, R) => {
-        const cx = this.sx(ax) + ts / 2, cy = this.sy(ay) + ts / 2;
-        const g = d.createRadialGradient(cx, cy, 0, cx, cy, R);
-        g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.55, 'rgba(0,0,0,0.92)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-        d.fillStyle = g; d.fillRect(cx - R, cy - R, R * 2, R * 2);
-      };
+      // Big screens get a generous view: the lantern's visible reach grows with the viewport (gameplay light radius
+      // is unchanged, so pacing is the same on every screen) and the dark outside the light is dim, not black.
+      // Low oil pulls both back in, so the lantern-runs-out tension stays.
       const fl = 1 + Math.sin(this.t * 13) * 0.025 + Math.sin(this.t * 7.3) * 0.02;
       const oilF = w.oil < 3 ? 0.55 + 0.45 * (w.oil / 3) : 1;
-      light(w.player.px, w.player.py, (lr + 0.5) * ts * fl * oilF);
+      const R0 = (lr + 0.5) * ts, Rv = Math.max(R0, Math.min(R0 * 2.2, 0.3 * Math.min(this.w, this.h * 1.25)));
+      const big = Math.max(0, Math.min(1, (Math.min(this.w, this.h * 1.25) - 420) / 500)), dimF = (oilF - 0.55) / 0.45; // viewport: 0 on phones, ~0.4 in a 907x510 embed, 1 at 1080p+
+      const amb = 0.97 - 0.15 * big * dimF;
+      this.lightView = { R0, Rv, amb };
+      d.fillStyle = `rgba(4,2,10,${amb.toFixed(3)})`; d.fillRect(-30, top, this.w + 60, this.h + 60);
+      if (surfY > -ts * 3) { const g = d.createLinearGradient(0, surfY, 0, surfY + ts * 3); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); d.globalCompositeOperation = 'destination-out'; d.fillStyle = g; d.fillRect(-30, top, this.w + 60, ts * 2.2); }
+      d.globalCompositeOperation = 'destination-out';
+      d.fillStyle = `rgba(0,0,0,${(0.32 + 0.12 * big * dimF).toFixed(3)})`; // dug tunnels you've seen read clearly
+      for (let y = Math.max(0, y0); y <= y1; y++) { const r = w.row(y); for (let x = this.xa; x <= this.xb; x++) if (r.seen[x]) d.fillRect(this.sx(x), this.sy(y), ts, ts); }
+      const light = (ax, ay, R, reach) => { // full light to R*0.55, fading to R; optional soft glow out to `reach`
+        const cx = this.sx(ax) + ts / 2, cy = this.sy(ay) + ts / 2, E = Math.max(R, reach || 0), k = R / E;
+        const g = d.createRadialGradient(cx, cy, 0, cx, cy, E);
+        g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.55 * k, 'rgba(0,0,0,0.92)');
+        if (E > R * 1.05) { g.addColorStop(k, 'rgba(0,0,0,0.6)'); g.addColorStop(k + (1 - k) * 0.5, 'rgba(0,0,0,0.25)'); }
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        d.fillStyle = g; d.fillRect(cx - E, cy - E, E * 2, E * 2);
+      };
+      light(w.player.px, w.player.py, R0 * fl * oilF, Rv * fl * oilF);
       light(w.buddy.px, w.buddy.py, (w.st.buddyLight ? 3 : 1.3) * ts);
       for (const c of w.creatures) if (!c.dead && c.type.name === 'Magma Imp') light(c.px, c.py, ts * 0.9);
       if (this.flash > 0) { d.fillStyle = `rgba(0,0,0,${Math.min(1, this.flash * 2)})`; d.fillRect(-30, -30, this.w + 60, this.h + 60); }
@@ -379,7 +388,7 @@ class Renderer {
       ctx.drawImage(this.dark, 0, 0);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.translate(shx, shy);
       // warm lantern tint
-      const cx = this.sx(w.player.px) + ts / 2, cy = this.sy(w.player.py) + ts / 2, R = (lr + 0.5) * ts;
+      const cx = this.sx(w.player.px) + ts / 2, cy = this.sy(w.player.py) + ts / 2, R = Math.max(R0, Rv * 0.8) * oilF;
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
       g.addColorStop(0, 'rgba(255,190,90,0.22)'); g.addColorStop(1, 'rgba(255,140,40,0)');
       ctx.fillStyle = g; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
