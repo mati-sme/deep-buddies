@@ -124,17 +124,18 @@ body.big .map-inner { zoom: var(--z); }
 .rails .beam { stroke: #3a3060; stroke-width: 3; stroke-dasharray: 4 6; }
 .rails .beam.avail { stroke: #7a6ab0; }
 .rails .beam.on { stroke: #d8b0ff; stroke-width: 4; stroke-dasharray: none; filter: drop-shadow(0 0 5px #b080ff); }
-.brlabel { position: absolute; transform: translateX(-50%); font-weight: 700; font-size: 17px; text-shadow: 0 2px 0 #000, 0 0 6px #000; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
+.brlabel { position: absolute; transform: translateX(-50%); font-weight: 700; font-size: calc(17px * var(--lz, 1)); text-shadow: 0 2px 0 #000, 0 0 6px #000; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
 .station { position: absolute; transform: translate(-50%, -50%); text-align: center; line-height: 1; }
 .station .ic.big { width: 42px; height: 42px; }
 .station small { display: block; font-size: 14px; color: var(--ink); text-shadow: 0 2px 0 #000; }
 .node { position: absolute; width: 66px; height: 66px; margin: -33px 0 0 -33px; border-radius: 6px; background: #3a2414; border: 4px solid #1a0c04; display: flex; align-items: center; justify-content: center; transition: transform .1s; box-shadow: 0 4px 0 rgba(0,0,0,.55), inset 0 -4px 0 rgba(0,0,0,.25), inset 0 4px 0 rgba(255,255,255,.12); }
 .node .nic { width: 39px; height: 39px; }
 .node .q { display: none; font-size: 26px; font-weight: 700; color: #8a6a4a; }
-.node .lv { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); background: #1a0c04; color: var(--ink); font-size: 13px; font-weight: 700; padding: 0 6px; border: 2px solid #000; white-space: nowrap; display: flex; align-items: center; }
+.node .lv { position: absolute; bottom: -12px; left: 50%; transform: translateX(-50%); background: #1a0c04; color: var(--ink); font-size: calc(13px * var(--lz, 1)); font-weight: 700; padding: 0 6px; border: 2px solid #000; white-space: nowrap; display: flex; align-items: center; bottom: calc(-12px * var(--lz, 1)); }
 .node .lv:empty { display: none; }
-.node .lv .ic { width: 15px; height: 15px; vertical-align: 0; }
-.node .nm { position: absolute; top: -24px; left: 50%; transform: translateX(-50%); font-size: 14px; white-space: nowrap; color: var(--ink); background: rgba(10,5,2,.78); padding: 0 5px; pointer-events: none; }
+.node .lv .ic { width: calc(15px * var(--lz, 1)); height: calc(15px * var(--lz, 1)); vertical-align: 0; }
+.node.nm-crowd .nm { display: none; } .node.nm-crowd:hover .nm { display: block; z-index: 5; }
+.node .nm { position: absolute; top: calc(-24px * var(--lz, 1)); left: 50%; transform: translateX(-50%); font-size: calc(14px * var(--lz, 1)); white-space: nowrap; color: var(--ink); background: rgba(10,5,2,.78); padding: 0 5px; pointer-events: none; }
 .node.v-hide { display: none; }
 .node.v-tease { width: 40px; height: 40px; margin: -20px 0 0 -20px; background: #1e140c !important; border-color: #3a2a1a; filter: none !important; animation: none !important; cursor: default; }
 .node.v-tease .nic, .node.v-tease .nm, .node.v-tease .lv { display: none; }
@@ -153,7 +154,7 @@ body.big .map-inner { zoom: var(--z); }
 .map-inner.pr { background: transparent; }
 .mapfog { position: absolute; left: 0; right: 0; z-index: 3; pointer-events: none; display: flex; align-items: flex-start; justify-content: center; padding-top: 34px;
   background: linear-gradient(rgba(18,8,4,0), rgba(18,8,4,.85) 60px, #120804 140px); }
-.mapfog span { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; color: var(--dim); background: rgba(0,0,0,.35); padding: 6px 12px; border-radius: 8px; }
+.mapfog span { display: inline-flex; align-items: center; gap: 8px; font-size: calc(15px * var(--lz, 1)); color: var(--dim); background: rgba(0,0,0,.35); padding: 6px 12px; border-radius: 8px; }
 .mapfog .ic { width: 18px; height: 18px; }
 .star { position: absolute; width: 3px; height: 3px; background: #fff; animation: twinkle 2.4s infinite alternate; }
 .layer { position: absolute; left: 0; right: 0; }
@@ -225,7 +226,8 @@ textarea { width: 100%; margin-top: 8px; background: #1a0c04; color: var(--ink);
 body.wide #app { max-width: none; }
 body.wide .hud-top { flex-direction: row; align-items: center; right: 120px; gap: 10px; }
 body.wide .oil { width: min(460px, 38vw); flex: none; }
-body.wide .chips { flex-wrap: nowrap; }
+body.wide .chips { flex-wrap: nowrap; flex: none; }
+body.wide .hud-top { flex-wrap: wrap; row-gap: 6px; } body.wide .goalchip { min-width: 0; flex: 0 1 auto; } /* small embeds: the goal chip wraps to a 2nd row instead of running under the buttons */
 body.wide #abilities { bottom: calc(14px + env(safe-area-inset-bottom)); right: calc(12px + env(safe-area-inset-right)); }
 body.wide .hud-right { right: calc(8px + env(safe-area-inset-right)); }
 body.wide .hud-top { left: calc(8px + env(safe-area-inset-left)); }
@@ -277,7 +279,7 @@ body.big .sheet { width: min(460px, 36vw); }
 body.big .oil { width: min(460px, 30vw); }
 body.big .modal .card { max-height: calc((100vh - 28px) / var(--z)); }
 body.big .home-card { max-height: calc((100% - 20px) / var(--z)); }
-body.big .node .nm { font-size: 15px; top: -26px; }
+body.big .node .nm { font-size: calc(15px * var(--lz, 1)); top: calc(-26px * var(--lz, 1)); }
 
 /* ---------- tutorial overlay (first dive) ---------- */
 #tut { position: absolute; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; z-index: 6; }

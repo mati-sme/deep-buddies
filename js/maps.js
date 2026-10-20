@@ -126,11 +126,25 @@ class NodeMap {
     // the map only extends as deep as what has been revealed; below that, fog fills the view (no dead empty area)
     let deep = 0, x0 = 1e9, x1 = -1e9;
     for (const n of o.nodes) if (this.vis(n) !== 'hide') { deep = Math.max(deep, n.y); x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); }
-    if (document.body.classList.contains('big') && this.wrap.clientWidth) { // big screens: zoom up, but keep every revealed branch in view
-      const cssZ = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--z')) || 1;
-      const fitZ = this.wrap.clientWidth / ((x1 - x0 + 2.6) * o.G);
-      this.inner.style.zoom = Math.max(0.85, Math.min(cssZ, fitZ)).toFixed(3);
+    // zoom to fit every revealed branch across (big screens zoom up to --z, embeds such as 907x510 zoom out); labels are
+    // counter-scaled (--lz) so they stay readable. Below the minimum zoom the map simply stays draggable.
+    const ww = this.wrap.clientWidth;
+    let z = 1;
+    if (ww >= 600) {
+      const maxZ = document.body.classList.contains('big') ? parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--z')) || 1 : 1;
+      const minZ = window.matchMedia && matchMedia('(pointer: coarse)').matches ? 0.6 : 0.4;
+      z = Math.max(minZ, Math.min(maxZ, (ww - 8) / ((x1 - x0 + 2.6) * o.G)));
+      this.inner.style.zoom = z.toFixed(3);
     } else this.inner.style.zoom = '';
+    const lz = Math.max(1, Math.min(1.9, 0.85 / z));
+    this.inner.style.setProperty('--lz', lz.toFixed(3));
+    // when zoomed out, a label is hidden if a revealed neighbour on the same row would overlap it (hover/select shows it)
+    const tight = z < 0.75, shown = o.nodes.filter((n) => this.vis(n) === 'show');
+    for (const n of o.nodes) {
+      const lw = (q) => q.name.length * 14 * lz * 0.62 + 10; // label width estimate in map units
+      const crowd = tight && this.vis(n) === 'show' && shown.some((m) => m !== n && m.y === n.y && Math.abs(m.x - n.x) * o.G < (lw(n) + lw(m)) / 2 + 4);
+      this.btn[n.id].classList.toggle('nm-crowd', !!crowd && this.sel !== n.id);
+    }
     const full = (this.maxY + 1.2) * o.G, revealH = Math.min(full, this.py(deep + 1.3));
     const viewH = this.wrap.clientHeight ? this.wrap.clientHeight / this.zoom() - 2 : 0;
     const h = Math.max(revealH, Math.min(full, viewH));
