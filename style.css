@@ -151,6 +151,10 @@ body.big .map-inner { zoom: var(--z); }
 /* relic map */
 .prwrap { background: radial-gradient(ellipse at 50% 0%, #2a1a50, #07040f 70%); }
 .map-inner.pr { background: transparent; }
+.mapfog { position: absolute; left: 0; right: 0; z-index: 3; pointer-events: none; display: flex; align-items: flex-start; justify-content: center; padding-top: 34px;
+  background: linear-gradient(rgba(18,8,4,0), rgba(18,8,4,.85) 60px, #120804 140px); }
+.mapfog span { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; color: var(--dim); background: rgba(0,0,0,.35); padding: 6px 12px; border-radius: 8px; }
+.mapfog .ic { width: 18px; height: 18px; }
 .star { position: absolute; width: 3px; height: 3px; background: #fff; animation: twinkle 2.4s infinite alternate; }
 .layer { position: absolute; left: 0; right: 0; }
 .node.br-pr { border-radius: 50%; background: #1e1636; border-color: #5a4a90; }
@@ -306,3 +310,4 @@ body.short .goaldone { font-size: 14px; padding: 1px 6px; margin: 3px 0; } body.
 body.short .record { padding: 1px; margin: 3px 0; } body.short .affordnote { margin-top: 2px; font-size: 14px; }
 body.short .sumrow .ic { width: 18px; height: 18px; } body.short .sumtotal .ic { width: 27px; height: 27px; }
 body.short .modal h2 .ic { width: 24px; height: 24px; }
+@media (max-width: 600px) { .mapfog span { display: none; } } /* narrow: the map header already says "Buy upgrades to reveal more" */

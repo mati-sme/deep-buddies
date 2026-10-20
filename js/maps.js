@@ -123,9 +123,22 @@ class NodeMap {
       else lv.innerHTML = o.level(n.id) ? IH('check') : '';
     }
     this.inner.querySelectorAll('.brlabel').forEach((l) => l.classList.toggle('hidden', !shownBr[l.dataset.br]));
-    // the map only extends as deep as what has been revealed (no big empty area below)
-    let deep = 0; for (const n of o.nodes) if (this.vis(n) !== 'hide') deep = Math.max(deep, n.y);
-    this.inner.style.height = Math.min((this.maxY + 1.2) * o.G, this.py(deep + 1.3)) + 'px';
+    // the map only extends as deep as what has been revealed; below that, fog fills the view (no dead empty area)
+    let deep = 0, x0 = 1e9, x1 = -1e9;
+    for (const n of o.nodes) if (this.vis(n) !== 'hide') { deep = Math.max(deep, n.y); x0 = Math.min(x0, n.x); x1 = Math.max(x1, n.x); }
+    if (document.body.classList.contains('big') && this.wrap.clientWidth) { // big screens: zoom up, but keep every revealed branch in view
+      const cssZ = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--z')) || 1;
+      const fitZ = this.wrap.clientWidth / ((x1 - x0 + 2.6) * o.G);
+      this.inner.style.zoom = Math.max(0.85, Math.min(cssZ, fitZ)).toFixed(3);
+    } else this.inner.style.zoom = '';
+    const full = (this.maxY + 1.2) * o.G, revealH = Math.min(full, this.py(deep + 1.3));
+    const viewH = this.wrap.clientHeight ? this.wrap.clientHeight / this.zoom() - 2 : 0;
+    const h = Math.max(revealH, Math.min(full, viewH));
+    this.inner.style.height = h + 'px';
+    if (!this.fog) { this.fog = el('div', 'mapfog'); this.inner.appendChild(this.fog); }
+    this.fog.style.top = (revealH - o.G * 0.35) + 'px'; this.fog.style.height = Math.max(0, h - revealH + o.G * 0.35) + 'px';
+    this.fog.classList.toggle('hidden', h - revealH < o.G * 0.5);
+    this.fog.innerHTML = hidden && o.kind === 'up' ? `<span>${IH('lock')}${hidden} more upgrades below. Buy upgrades to reveal them</span>` : '';
     this.hiddenCount = hidden;
   }
   /* centre of the visible part of the map */
