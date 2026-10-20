@@ -1,6 +1,7 @@
 // Silent 18 s store preview videos: about 1 s on the cover, a short crossfade, then a real dive played by a small bot.
-// Frames are captured frame-exact: CDP virtual time moves timers and CSS animations by 1/30 s and the game is ticked by
-// exactly 1/30 s per frame (__db.manual), so the result is smooth however slow capture is.
+// Frames are captured frame-exact on a virtual clock: per frame the game is ticked by exactly 1/30 s (__db.manual), page
+// timers run from a virtual queue and CSS animations/transitions are stepped by 1/30 s. So the video is smooth and in
+// real game speed however slow the capture is. (CDP virtual time can't be used: screenshots stall while it is paused.)
 // node tools/cover/make-videos.js <outdir> [gameUrl]
 const { chromium } = require('../../test/node_modules/playwright-core');
 const path = require('path'), fs = require('fs'), { execFileSync } = require('child_process');
@@ -29,20 +30,43 @@ async function video(browser, name, vw, vh, dpr, mobile, coverArgs) {
   await cover(browser, OW, OH, coverArgs[0], coverArgs[1], path.join(fd, 'cover.png'));
   const ctx = await browser.newContext({ viewport: { width: vw, height: vh }, deviceScaleFactor: dpr, isMobile: mobile, hasTouch: mobile, serviceWorkers: 'block' });
   await ctx.addInitScript((s) => { localStorage.setItem('deep-buddies-save-v1', JSON.stringify(s)); }, SAVE);
+  await ctx.addInitScript(() => { // virtual clock: until start() everything is real; after it new timers wait for advance()
+    const rs = window.setTimeout, rc = window.clearTimeout, ri = window.setInterval, rci = window.clearInterval;
+    const q = new Map(), anim = new Map(); let on = false, now = 0, id = 1e6;
+    const add = (fn, ms, iv, a) => { const i = id++; q.set(i, { id: i, at: now + Math.max(0, +ms || 0), iv, fn: () => (typeof fn === 'function' ? fn(...a) : 0) }); return i; };
+    window.setTimeout = (fn, ms, ...a) => (on ? add(fn, ms, 0, a) : rs(fn, ms, ...a));
+    window.setInterval = (fn, ms, ...a) => (on ? add(fn, ms, Math.max(4, +ms || 0), a) : ri(fn, ms, ...a));
+    window.clearTimeout = (i) => { q.delete(i); rc(i); }; window.clearInterval = (i) => { q.delete(i); rci(i); };
+    window.__vt = {
+      start() { on = true; },
+      advance(ms) {
+        const end = now + ms;
+        for (let guard = 0; guard < 500; guard++) {
+          let b = null; for (const t of q.values()) if (t.at <= end && (!b || t.at < b.at)) b = t;
+          if (!b) break; now = b.at; if (b.iv) b.at += b.iv; else q.delete(b.id);
+          try { b.fn(); } catch (e) { console.error(e); }
+        }
+        now = end;
+        for (const a of document.getAnimations()) {
+          if (!anim.has(a)) anim.set(a, +a.currentTime || 0); else anim.set(a, anim.get(a) + ms);
+          if (a.playState !== 'finished') { a.pause(); a.currentTime = anim.get(a); }
+        }
+      },
+    };
+  });
   const page = await ctx.newPage(); const errs = [];
   page.on('pageerror', (e) => errs.push(e.message)); page.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
   await page.goto(URL); await page.waitForFunction(() => window.__db && window.__db.mode === 'camp'); await sleep(1200);
   const cdp = await ctx.newCDPSession(page);
-  await cdp.send('Emulation.setVirtualTimePolicy', { policy: 'pause' });
   await page.evaluate(() => {
     const db = window.__db, T = db.C.T, want = (t) => t === T.ORE || t === T.CHEST || t === T.FLASK;
-    db.manual(true); db.startRun();
+    window.__vt.start(); db.manual(true); db.startRun();
     let lastPos = '', still = 0, side = 0;
     window.__bot = setInterval(() => {
       const w = db.world; db.keys.length = 0; if (db.mode !== 'run' || !w || w.ended) return;
       const p = w.player, pos = p.x + ',' + p.y; still = pos === lastPos ? still + 1 : 0; lastPos = pos;
       let best = null, bd = 99;
-      for (let y = p.y - 1; y <= p.y + 4; y++) for (let x = p.x - 4; x <= p.x + 4; x++) {
+      for (let y = p.y; y <= p.y + 4; y++) for (let x = p.x - 2; x <= p.x + 2; x++) { // only small detours: the clip should go deep
         if (y < 0 || !want(w.tile(x, y)) || !w.row(y).seen[x]) continue;
         const d = Math.abs(x - p.x) + Math.abs(y - p.y) * 1.3; if (d < bd) { bd = d; best = [x, y]; }
       }
@@ -55,9 +79,7 @@ async function video(browser, name, vw, vh, dpr, mobile, coverArgs) {
   });
   const GAME_F = SECS * FPS - COVER_F;
   for (let i = 0; i < GAME_F; i++) {
-    const done = new Promise((r) => cdp.once('Emulation.virtualTimeBudgetExpired', r));
-    await cdp.send('Emulation.setVirtualTimePolicy', { policy: 'advance', budget: 1000 / FPS }); await done;
-    await page.evaluate((dt) => window.__db.tick(dt), 1 / FPS); // game time: exactly one frame (rAF timing under virtual time is not 1:1)
+    await page.evaluate((dt) => { window.__vt.advance(dt * 1000); window.__db.tick(dt); }, 1 / FPS);
     const shot = await cdp.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(path.join(fd, `g${String(i).padStart(4, '0')}.png`), Buffer.from(shot.data, 'base64'));
   }

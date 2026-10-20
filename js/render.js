@@ -4,6 +4,12 @@
 const D = root.DBData, C = root.DBCore, S = root.DBSprites;
 const { T } = C;
 const FONT = '"Pixelify Sans", system-ui, sans-serif';
+// drop shadow + thin round outline: keeps the openings of C, G, e readable at small sizes (the caller fills the text)
+function outlinedText(ctx, text, x, y, fs) {
+  const sh = Math.max(2, Math.round(fs / 9));
+  ctx.fillStyle = 'rgba(20,8,4,0.85)'; ctx.fillText(text, x + sh, y + sh);
+  ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, Math.round(fs / 8)); ctx.strokeStyle = 'rgba(20,8,4,0.9)'; ctx.strokeText(text, x, y);
+}
 const IC = (n) => root.DBIcons.get(n);
 
 class Renderer {
@@ -240,8 +246,8 @@ class Renderer {
     ctx.drawImage(IC('depth:#ffd84a'), Math.round(X - sz / 2), Math.round(by), sz, sz);
     if (a.text) {
       const fs = Math.max(15, Math.round(ts * 0.36));
-      ctx.font = `700 ${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.strokeText(a.text, X, by - 4);
+      ctx.font = `500 ${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      outlinedText(ctx, a.text, X, by - 4, fs);
       ctx.fillStyle = '#fff2a0'; ctx.fillText(a.text, X, by - 4);
     }
   }
@@ -409,10 +415,10 @@ class Renderer {
     for (const p of this.pops) {
       p.life -= dt; p.y -= dt * 1.2;
       const fs = Math.max(14, Math.round(ts * (p.big ? 0.5 : 0.4)));
-      ctx.font = `700 ${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `500 ${fs}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; // 700 + thick stroke closed C/G/e
       ctx.globalAlpha = Math.min(1, p.life * 2);
       const icw = p.icon ? fs * 1.15 : 0, X = this.sx(p.x) + icw / 2, Y = this.sy(p.y);
-      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText(p.text, X, Y);
+      outlinedText(ctx, p.text, X, Y, fs);
       ctx.fillStyle = p.col; ctx.fillText(p.text, X, Y);
       if (p.icon) { const tw = ctx.measureText(p.text).width, q = Math.round(fs * 1.05); ctx.drawImage(IC(p.icon), Math.round(X - tw / 2 - q - 3), Math.round(Y - q / 2), q, q); }
       ctx.globalAlpha = 1;
