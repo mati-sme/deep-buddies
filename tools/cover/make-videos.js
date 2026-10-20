@@ -59,7 +59,7 @@ async function video(browser, name, vw, vh, dpr, mobile, coverArgs) {
   await page.goto(URL); await page.waitForFunction(() => window.__db && window.__db.mode === 'camp'); await sleep(1200);
   const cdp = await ctx.newCDPSession(page);
   await page.evaluate(() => {
-    const db = window.__db, T = db.C.T, want = (t) => t === T.ORE || t === T.CHEST || t === T.FLASK;
+    const db = window.__db, T = db.C.T, want = (t) => t === T.ORE || t === T.CHEST; // no flasks: the dive should end inside the clip
     window.__vt.start(); db.manual(true); db.startRun();
     let lastPos = '', still = 0, side = 0;
     window.__bot = setInterval(() => {
@@ -79,6 +79,8 @@ async function video(browser, name, vw, vh, dpr, mobile, coverArgs) {
   });
   const GAME_F = SECS * FPS - COVER_F;
   for (let i = 0; i < GAME_F; i++) {
+    // the lantern goes out at about 13 s of gameplay, so the clip closes on the run summary
+    if (i === Math.round(13 * FPS)) await page.evaluate(() => { const w = window.__db.world; if (window.__db.mode === 'run' && w) w.oil = Math.min(w.oil, 1); });
     await page.evaluate((dt) => { window.__vt.advance(dt * 1000); window.__db.tick(dt); }, 1 / FPS);
     const shot = await cdp.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(path.join(fd, `g${String(i).padStart(4, '0')}.png`), Buffer.from(shot.data, 'base64'));
