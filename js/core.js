@@ -13,7 +13,8 @@ const passable = (t) => t === T.EMPTY || t === T.WATER || t === T.LAVA;
 function fmt(n) {
   if (!isFinite(n)) return '∞';
   if (n < 0) return '-' + fmt(-n);
-  if (n < 1000) return n < 10 && n % 1 ? n.toFixed(1) : String(Math.floor(n));
+  if (n < 1000) return String(Math.floor(n)); // v2: whole numbers only (coins are x10, so nothing is lost)
+  if (n < 1e5) return String(Math.floor(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   const u = ['K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
   let i = -1;
   while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
@@ -27,19 +28,51 @@ function mulberry32(a) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-const hp0 = (s) => Math.pow(HP_GROWTH, s);
-const val0 = (tier) => Math.pow(VAL_GROWTH, tier);
+// Topsoil is a little softer (0.92) so a fresh pickaxe breaks the first ~7 m in one swing and Sharpen I clears the whole layer.
+const hp0 = (s) => (s === 0 ? 0.92 : Math.pow(HP_GROWTH, s));
+const val0 = (tier) => D.COIN * Math.pow(VAL_GROWTH, tier);
 const stratumOf = (y) => Math.max(0, Math.floor(y / CHUNK));
 
 /* ---------- save ---------- */
+const SAVE_V = 2;
+function newTally() { return { ore: {}, chests: 0, kills: 0, buys: 0, finds: 0 }; }
 function newSave() {
-  return { v: 1, coins: 0, up: {}, relics: 0, pr: {}, bestDepth: 0, bestEver: 0, runs: 0, caveIns: 0,
-    coinsShaft: 0, coinsTotal: 0, relicsTotal: 0, muted: false, autoBuy: false, playTime: 0, seed: 1, seenIntro: false };
+  return { v: SAVE_V, coins: 0, up: {}, relics: 0, pr: {}, bestDepth: 0, bestEver: 0, runs: 0, caveIns: 0,
+    coinsShaft: 0, coinsTotal: 0, relicsTotal: 0, muted: false, musicOff: false, autoBuy: false, playTime: 0, seed: 1, seenIntro: false,
+    tutDone: false, goal: 0, tally: newTally() };
+}
+// v1 -> v2: coin values are x10 (so the UI only shows whole numbers); players who already played skip the guided first dive
+// and every goal they have clearly done already. Nothing is lost: upgrades, relics, records stay as they were.
+function migrate(s) {
+  const v = s.v || 1;
+  if (v < 2) {
+    for (const k of ['coins', 'coinsShaft', 'coinsTotal', 'bestRunCoins']) if (typeof s[k] === 'number') s[k] = Math.round(s[k] * D.COIN);
+    s.tutDone = (s.runs || 0) > 0;
+    s.tally = newTally();
+    s.goal = 0;
+    while (s.goal < D.GOALS.length && goalSkippable(s, D.GOALS[s.goal])) s.goal++;
+    s.migratedFrom = v;
+  }
+  s.v = SAVE_V;
+  return s;
+}
+function goalSkippable(s, g) { // used by the migration only: goals an existing save has obviously passed
+  const best = s.bestEver || 0, runs = s.runs || 0, up = s.up || {};
+  if (g.kind === 'depth') return best >= g.n;
+  if (g.kind === 'up') return (up[g.up] || 0) > 0 || (s.caveIns || 0) > 0;
+  if (g.kind === 'caveins') return (s.caveIns || 0) >= g.n;
+  if (g.kind === 'ore') return runs >= 3 && best >= (g.tier === 0 ? 8 : 25);
+  return runs >= 3; // buys / chests / kills
 }
 function fixSave(s) {
   const n = newSave();
   if (!s || typeof s !== 'object') return n;
+  const fresh = s.v === undefined && s.runs === undefined; // not a save at all
+  if (fresh) return n;
+  migrate(s);
   for (const k in n) if (s[k] === undefined) s[k] = n[k];
+  if (!s.tally || typeof s.tally !== 'object') s.tally = newTally();
+  for (const k in newTally()) if (s.tally[k] === undefined) s.tally[k] = newTally()[k];
   return s;
 }
 const lvl = (save, id) => save.up[id] || 0;
@@ -109,13 +142,13 @@ function stats(save) {
   const pickTier = tierOf(save, 'pick'), swordTier = tierOf(save, 'sword');
   const s = { evo, pickTier, swordTier, armor: L('armor') };
   s.power = Math.pow(4, pickTier) * Math.pow(1.2, L('sharpen')) * Math.pow(1.3, P('p_power')) * (1 + 0.1 * L('helmet')) * Math.pow(2, core);
-  s.swing = 2.2 * Math.pow(1.08, L('swing')) * Math.pow(1.07, L('gloves'));
+  s.swing = 2.6 * Math.pow(1.08, L('swing')) * Math.pow(1.07, L('gloves'));
   s.crit = 0.03 * L('crit');
   s.quake = 0.05 * L('quake');
   s.weapon = Math.pow(5, swordTier) * Math.pow(1.25, L('wtrain')) * Math.pow(2, core);
   s.attack = 1.3 * Math.pow(1.1, L('wspeed')) * Math.pow(1.07, L('gloves'));
   s.bounty = 1 + 0.4 * L('bounty');
-  s.oilMax = 10 + 2 * L('tank') + 4 * L('reserve') + 3 * P('p_oil') + 5 * core;
+  s.oilMax = 15 + 3 * L('tank') + 4 * L('reserve') + 3 * P('p_oil') + 5 * core;
   s.burn = Math.pow(0.96, L('econ')) * Math.pow(0.95, P('p_time'));
   s.light = (2.6 + 0.5 * L('wick')) * (1 + 0.03 * L('helmet'));
   s.flask = 2 + 0.5 * L('oilfind');
@@ -161,7 +194,7 @@ function caveIn(save) {
   if (keep >= 2) for (let i = 1; i <= 8; i++) if (old['sword' + i]) save.up['sword' + i] = 1;
   if (keep >= 3) { if (old.armor) { save.up.armor = old.armor; save.up.boots = Math.max(1, save.up.boots || 0); } }
   const ps = plvl(save, 'p_start');
-  save.coins = ps ? Math.pow(10, ps + 1) : 0;
+  save.coins = ps ? D.COIN * Math.pow(10, ps + 1) : 0;
   save.bestDepth = 0; save.coinsShaft = 0;
   return gain;
 }
@@ -181,12 +214,20 @@ const BUDDY_LINES = {
   bagfull: ['My pockets are full!', 'Bag is full!'],
   flask: ['Oil! Yay!', 'More light!'],
   boom: ['KABOOM!', 'Whoa!', 'Pfew, stinky gas!'],
+  sniffs: ['I smell something!', '*sniff* Treasure nearby!', 'Ooh, wait here!'],
+  find: ['Look what I found!', 'Pip found treasure!', 'For you, partner!'],
   idle: ['I\'ll check over here!', 'Exploring!', 'Dig dig dig...', 'Hmm hmm hmm...', 'I love rocks.', 'What\'s down there?', '*sniff sniff*', 'Best day ever!']
 };
 
 class World {
-  constructor(save, seed, width) {
+  constructor(save, seed, width, opts) {
+    opts = opts || {};
     this.W = Math.max(D.W, Math.min(40, Math.floor(width || D.W)));
+    this.tut = !!opts.tutorial;          // guided first dive: placed copper vein, chest and flask near the start, no boulders in the way
+    this.oilHold = this.tut;             // ...and the lantern only starts burning once you have dug a few blocks
+    this.blocksP = 0; this.chestsN = 0; this.pipFound = 0;
+    this.pipFindT = opts.noFind ? Infinity : (this.tut ? 9 : 3.5 + ((seed >>> 3) % 100) / 40); // Pip sniffs out a treasure early in every dive
+    this.findTile = null;
     this.save = save;
     this.st = stats(save);
     this.seed = seed >>> 0;
@@ -212,7 +253,18 @@ class World {
     if (sy >= 0) { this.setT(cx, sy, T.EMPTY); this.setT(cx - 1, sy, T.EMPTY); }
     this.depthMax = Math.max(0, sy + 1);
     this.lastStratum = stratumOf(Math.max(0, sy));
+    if (this.tut) this.placeTutorial(cx);
     this.say(this.pick('start'));
+  }
+  placeTutorial(cx) {
+    this.ensure(0);
+    const put = (x, y, t, tier) => { if (x < 0 || x >= this.W) return; const r = this.row(y); r.t[x] = t; r.ore[x] = t === T.ORE ? tier : -1; const h = (t === T.CHEST ? 1.6 : t === T.ORE ? 1.2 : 0.92) * hp0(0); r.hp[x] = r.max[x] = h; };
+    for (let y = 0; y < 14; y++) for (let x = cx - 2; x <= cx + 2; x++) { const t = this.tile(x, y); if (t === T.BOULDER || t === T.CHEST || t === T.FLASK || passable(t)) put(x, y, T.ROCK); }
+    this.creatures = this.creatures.filter((c) => c.y > 16);
+    for (const [x, y] of [[cx + 1, 2], [cx + 2, 2], [cx + 1, 3], [cx + 2, 3]]) put(x, y, T.ORE, 0); // copper vein right next to the shaft
+    put(cx - 1, 6, T.CHEST);                                                                       // a treasure chest a little deeper
+    put(cx, 9, T.FLASK);                                                                           // and an oil flask on the way down
+    this.tutSpots = { ore: { x: cx + 1, y: 2 }, chest: { x: cx - 1, y: 6 } };
   }
   mkActor(x, y) { return { x, y, px: x, py: y, face: 1, moveCd: 0, swingCd: 0, atkCd: 0, goal: null, goalT: 0, dig: null, digT: 0, hurtT: 0 }; }
   pick(k) { const a = BUDDY_LINES[k]; return a[Math.floor(Math.random() * a.length)]; }
@@ -288,7 +340,7 @@ class World {
     const r = this.row(y), t = r.t[x], s = stratumOf(y);
     const big = r.max[x] > dmg * 3.5 || t === T.BOULDER;
     r.t[x] = T.EMPTY; r.hp[x] = 0;
-    this.blocks++;
+    this.blocks++; if (who === 'p') this.blocksP++;
     this.ev.push({ type: 'break', x, y, s, big, t, who });
     if (t === T.ORE) {
       const tier = r.ore[x]; r.ore[x] = -1;
@@ -300,8 +352,10 @@ class World {
     } else if (t === T.FLASK) {
       this.oil = Math.min(this.st.oilMax, this.oil + this.st.flask); this.ev.push({ type: 'flask', x, y, amt: this.st.flask }); this.say(this.pick('flask'));
     } else if (t === T.CHEST) {
-      const v = val0(s) * 12 * this.st.gemBoost; this.chestV += v;
-      this.ev.push({ type: 'chest', x, y, v: v * this.st.valueMult }); this.say(this.pick('chest'), true);
+      const f = this.findTile && this.findTile.x === x && this.findTile.y === y;
+      const v = val0(s) * (f ? 8 : 12) * this.st.gemBoost; this.chestV += v; this.chestsN++;
+      if (f) { this.findTile = null; this.pipFound++; this.ev.push({ type: 'pipfind', x, y, v: v * this.st.valueMult }); this.say(this.pick('find'), true); }
+      else { this.ev.push({ type: 'chest', x, y, v: v * this.st.valueMult }); this.say(this.pick('chest'), true); }
     } else if (t === T.GAS) {
       this.explode(x, y, 1, hp0(s) * 1.2, true);
     }
@@ -468,7 +522,8 @@ class World {
         b.goal = null; b.restT = 1.2 + Math.random() * 2;
       }
     };
-    if (b.goal && b.goal.kind === 'cmd') pursue();
+    if (this.time >= this.pipFindT) this.pipSniff();
+    if (b.goal && (b.goal.kind === 'cmd' || b.goal.kind === 'find')) pursue();
     else if (foe) {
       b.goal = null;
       if (md(foe, b) > 1) this.goTo(b, foe.x, foe.y, bp, st.buddyRate, bs, 'b');
@@ -533,6 +588,24 @@ class World {
     b.idleT += dt;
     if (b.idleT > 9) { b.idleT = 0; if (Math.random() < 0.6) this.say(this.pick('idle')); }
   }
+  // Pip's treasure sense: once per dive he smells a buried treasure right where he is wandering and digs it out for you.
+  pipSniff() {
+    this.pipFindT = Infinity;
+    const b = this.buddy;
+    if (b.goal && b.goal.kind === 'cmd') { this.pipFindT = this.time + 2; return; }
+    for (const [dx, dy] of [[0, 1], [1, 0], [-1, 0], [0, 2], [1, 1], [-1, 1], [2, 0], [-2, 0]]) {
+      const x = b.x + dx, y = b.y + dy;
+      if (y < 0 || x < 0 || x >= this.W) continue;
+      const t = this.tile(x, y);
+      if (t !== T.ROCK && t !== T.BOULDER) continue;
+      const r = this.row(y); r.t[x] = T.CHEST; r.ore[x] = -1; r.hp[x] = r.max[x] = hp0(stratumOf(y)) * 1.5;
+      this.findTile = { x, y };
+      b.goal = { x, y, kind: 'find' }; b.goalT = 10; b.restT = 0;
+      this.ev.push({ type: 'pipsniff', x: b.x, y: b.y }); this.say(this.pick('sniffs'), true);
+      return;
+    }
+    this.pipFindT = this.time + 1.5; // boxed in by tunnels: try again a moment later
+  }
   lightR() { return this.st.light + (this.flareT > 0 ? 5 : 0); }
 
   /* --- main step --- */
@@ -543,7 +616,8 @@ class World {
     this.sayCd -= dt;
     for (const a of [p, b]) { a.moveCd -= dt; a.swingCd -= dt; a.atkCd -= dt; a.digT -= dt; a.hurtT -= dt; if (a.digT <= 0) a.dig = null; }
     this.flareT -= dt; this.flareCd -= dt; this.dynCd -= dt;
-    this.oil -= dt * st.burn * (1 + 0.06 * stratumOf(Math.max(0, p.y)));
+    if (this.oilHold && this.blocksP >= 3) this.oilHold = false;
+    if (!this.oilHold) this.oil -= dt * st.burn * (1 + 0.06 * stratumOf(Math.max(0, p.y)));
 
     // player
     const dir = input && input.dir;
@@ -623,7 +697,7 @@ class World {
     const depth = 0.1 * this.depthMax * val0(stratumOf(Math.max(0, this.depthMax - 1))) * st.depthMult * vm;
     const bounty = this.bounty * vm, chests = this.chestV * vm;
     const total = Math.floor(ore + depth + bounty + chests);
-    return { ore, oreN: this.bagN, depth, bounty, chests, total, depthMax: this.depthMax, time: this.time, kills: this.kills, blocks: this.blocks, oreTiers: this.oreTiers, record: this.depthMax > this.save.bestDepth };
+    return { ore, oreN: this.bagN, depth, bounty, chests, total, depthMax: this.depthMax, time: this.time, kills: this.kills, blocks: this.blocks, oreTiers: this.oreTiers, chestsN: this.chestsN, pipFound: this.pipFound, record: this.depthMax > this.save.bestDepth };
   }
 }
 
@@ -632,6 +706,44 @@ function applyRun(save, res) {
   save.runs++; save.playTime += res.time;
   save.bestDepth = Math.max(save.bestDepth, res.depthMax);
   save.bestEver = Math.max(save.bestEver, res.depthMax);
+  const ta = save.tally || (save.tally = newTally());
+  for (const k in res.oreTiers || {}) ta.ore[k] = (ta.ore[k] || 0) + res.oreTiers[k];
+  ta.chests += res.chestsN || 0; ta.kills += res.kills || 0; ta.finds += res.pipFound || 0;
+}
+
+/* ---------- goal chain ---------- */
+function goalDef(save) {
+  const i = save.goal || 0;
+  if (i < D.GOALS.length) return D.GOALS[i];
+  // endless: always 10 m past your deepest dive
+  const n = (Math.floor(Math.max(save.bestEver, D.CAVEIN_DEPTH) / 10) + 1) * 10;
+  return { id: 'deep' + n, kind: 'depth', n, text: `Reach ${n} m`, icon: 'depth', reward: Math.round(n * val0(stratumOf(n - 1)) * 0.5) };
+}
+// progress toward the current goal; w = the live dive (its ore, chests, kills and depth count before the run is banked)
+function goalProgress(save, w) {
+  const g = goalDef(save), ta = save.tally || newTally();
+  let cur = 0;
+  if (g.kind === 'depth') cur = Math.max(save.bestEver, w ? w.depthMax : 0);
+  else if (g.kind === 'ore') cur = (ta.ore[g.tier] || 0) + (w ? (w.oreTiers[g.tier] || 0) : 0);
+  else if (g.kind === 'chests') cur = ta.chests + (w ? w.chestsN : 0);
+  else if (g.kind === 'kills') cur = ta.kills + (w ? w.kills : 0);
+  else if (g.kind === 'buys') cur = ta.buys;
+  else if (g.kind === 'up') cur = lvl(save, g.up) > 0 ? 1 : 0;
+  else if (g.kind === 'caveins') cur = save.caveIns;
+  const n = g.n || 1;
+  return { g, cur: Math.min(cur, n), n, done: cur >= n };
+}
+// completes as many goals as are done right now, pays their rewards; returns the completed goal defs
+function checkGoals(save, w) {
+  const out = [];
+  for (let k = 0; k < 6; k++) {
+    const p = goalProgress(save, w);
+    if (!p.done) break;
+    save.coins += p.g.reward; save.coinsShaft += p.g.reward; save.coinsTotal += p.g.reward;
+    save.goal = (save.goal || 0) + 1;
+    out.push(p.g);
+  }
+  return out;
 }
 
 /* --- simple bot (pacing sim + headless test). Behaves like a decent tapper. --- */
@@ -666,6 +778,6 @@ function botThink(w) {
   p.goal = { x: gx, y: p.y + 1 }; p.goalT = 3;
 }
 
-const API = { T, passable, fmt, mulberry32, newSave, fixSave, lvl, plvl, UP, PR, cost, upState, buyUp, prState, buyPr, autoBuy, autoBuyPr, stats, relicsFor, caveIn, World, applyRun, botThink, stratumOf, val0, hp0, evoOf, tierOf };
+const API = { T, passable, fmt, mulberry32, newSave, fixSave, migrate, goalDef, goalProgress, checkGoals, SAVE_V, lvl, plvl, UP, PR, cost, upState, buyUp, prState, buyPr, autoBuy, autoBuyPr, stats, relicsFor, caveIn, World, applyRun, botThink, stratumOf, val0, hp0, evoOf, tierOf };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.DBCore = API;
 })(typeof self !== 'undefined' ? self : this);

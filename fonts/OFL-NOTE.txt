@@ -1,0 +1,7 @@
+fonts/pixelify-sans.woff is a subset (Latin) of "Pixelify Sans" (variable, wght 400-700),
+Copyright 2021 The Pixelify Sans Project Authors (https://github.com/eifetx/Pixelify-Sans).
+It is licensed under the SIL Open Font License, Version 1.1: https://openfontlicense.org
+The font is bundled unmodified apart from glyph subsetting and WOFF packaging.
+
+fonts/db-digits.woff is not Pixelify: it is a tiny digits-only font (0-9) hand-authored for Deep Buddies
+as 5x7 pixel bitmaps in tools/make-digits-font.py (Pixelify's "5" reads like an "S" at small sizes).

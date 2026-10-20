@@ -9,6 +9,8 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preload" href="fonts/pixelify-sans.woff" as="font" type="font/woff" crossorigin>
+<link rel="preload" href="fonts/db-digits.woff" as="font" type="font/woff" crossorigin>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,46 +19,52 @@
 
   <div id="hud" class="hidden">
     <div class="hud-top">
-      <div class="oil" title="Lantern oil"><span class="big">🏮</span><div class="bar"><div id="oilFill"></div></div><b id="oilTxt">10s</b></div>
+      <div class="oil" title="Lantern oil"><i data-ic="lantern" class="big"></i><div class="bar"><div id="oilFill"></div></div><b id="oilTxt">15s</b></div>
       <div class="chips">
-        <span class="chip" title="Depth">⬇️ <b id="depthTxt">0</b>m</span>
-        <span class="chip" title="Shaft record">🏆 <b id="recTxt">0</b>m</span>
-        <span class="chip" title="Backpack">🎒 <b id="bagTxt">0/10</b></span>
-        <span class="chip" title="Coins this run">🪙 <b id="runCoins">0</b></span>
+        <span class="chip" title="Depth"><i data-ic="depth"></i><b id="depthTxt">0</b>m</span>
+        <span class="chip" title="Shaft record"><i data-ic="trophy"></i><b id="recTxt">0</b>m</span>
+        <span class="chip" title="Backpack"><i data-ic="bag"></i><b id="bagTxt">0/10</b></span>
+        <span class="chip gold" id="runCoinsChip" title="Coins this dive"><i data-ic="coin"></i><b id="runCoins">0</b></span>
       </div>
+      <div id="goalChip" class="goalchip hidden"><i data-ic="flag"></i><span id="goalChipTxt"></span><div class="gbar"><div id="goalChipFill"></div></div></div>
     </div>
     <div class="hud-right">
-      <button id="btnMuteRun" class="round" aria-label="Sound">🔊</button>
-      <button id="btnSurface" class="round" aria-label="Go back up" title="Go back up">⏏️</button>
+      <button id="btnMuteRun" class="round" aria-label="Sound"><i data-ic="sound"></i></button>
+      <button id="btnSurface" class="round" aria-label="Go back up" title="Go back up"><i data-ic="up"></i></button>
     </div>
     <div id="abilities">
-      <button id="btnDyn" class="abil hidden" aria-label="Dynamite">🧨<i></i></button>
-      <button id="btnFlare" class="abil hidden" aria-label="Flare">✨<i></i></button>
-      <button id="btnCmd" class="abil" aria-label="Tell Pip where to dig" title="Tell Pip where to dig">🐾</button>
+      <button id="btnDyn" class="abil hidden" aria-label="Dynamite"><i data-ic="dynamite"></i><u></u></button>
+      <button id="btnFlare" class="abil hidden" aria-label="Flare"><i data-ic="sparkle"></i><u></u></button>
+      <button id="btnCmd" class="abil" aria-label="Tell Pip where to dig" title="Tell Pip where to dig"><i data-ic="paw"></i></button>
     </div>
     <div id="joy" class="hidden"><div class="ring"></div><div class="knob"></div></div>
     <div id="hint" style="opacity:0"></div>
+    <div id="tut" class="hidden">
+      <div class="tut-card"><div id="tutArt"></div><div id="tutTxt"></div></div>
+      <button id="tutSkip" class="btn small">Skip tutorial</button>
+    </div>
   </div>
 
-  <div id="camp">
+  <div id="camp" class="hidden">
     <header class="topbar">
-      <div class="logo">⛏️ Deep Buddies</div>
-      <div class="wallet"><span class="chip gold">🪙 <b id="coinTxt">0</b></span><span class="chip relic hidden" id="relicChip">🗿 <b id="relicTxt">0</b></span>
-      <button id="btnMute" class="round small" aria-label="Sound">🔊</button></div>
+      <div class="logo"><i data-ic="pick"></i>Deep Buddies</div>
+      <div class="wallet"><span class="chip gold" id="coinChip"><i data-ic="coin"></i><b id="coinTxt">0</b></span><span class="chip relic hidden" id="relicChip"><i data-ic="relic"></i><b id="relicTxt">0</b></span>
+      <button id="btnMusic" class="round small" aria-label="Music"><i data-ic="music"></i></button>
+      <button id="btnMute" class="round small" aria-label="Sound"><i data-ic="sound"></i></button></div>
     </header>
 
     <section id="tab-home" class="tab">
       <div class="home-spacer"></div>
       <div class="card home-card">
-        <div class="goal" id="goalTxt"></div>
-        <div class="gear" id="gearList"></div>
-        <button id="btnDig" class="dig">⛏️ DIG!<small id="digSub">🏮 10 s of oil</small></button>
+        <div class="goalcard" id="goalCard"></div>
+        <div class="gear hidden" id="gearList"></div>
+        <button id="btnDig" class="dig"><span><i data-ic="pick"></i>DIG!</span><small id="digSub"></small></button>
         <div class="records" id="records"></div>
       </div>
     </section>
 
     <section id="tab-map" class="tab hidden">
-      <div class="maptools"><span>🛤️ Upgrade Map</span><label id="autoWrap" class="hidden"><input type="checkbox" id="autoBuy"> 📒 Auto-buy</label></div>
+      <div class="maptools"><span><i data-ic="rails"></i>Upgrade Map</span><span id="mapHint" class="maphint"></span><label id="autoWrap" class="hidden"><input type="checkbox" id="autoBuy"> <i data-ic="notebook"></i>Auto-buy</label></div>
       <div class="mapwrap" id="upMap"></div>
       <div class="sheet hidden" id="upSheet"></div>
     </section>
@@ -69,35 +77,40 @@
 
     <section id="tab-set" class="tab hidden">
       <div class="card settings">
-        <h2>❓ How to play</h2>
-        <p>👆 Touch anywhere and drag: a joystick appears and you walk and dig that way. Short tap a block: go dig it. ⌨️ Arrows / WASD on a keyboard.</p><p>🐾 Pip the mole explores the mine on his own: he digs, finds ore and fights monsters near him. Tap 🐾 then tap a spot to send him there.</p>
-        <p>🏮 Your lantern runs out of oil. Grab 🫙 oil flasks, dig deep, find shiny ore 💎, then sell it at camp.</p>
-        <p>🛤️ Spend coins on the Upgrade Map. 🗿 At 100 m you can Cave-in for Relics and evolve Pip on the Relic Map.</p>
-        <p>💨 Watch out for green gas rocks, water and lava.</p>
-        <h2>💾 Save</h2>
+        <h2><i data-ic="help"></i>How to play</h2>
+        <p><i data-ic="hand"></i><b>Move &amp; dig:</b> touch anywhere and drag (an invisible joystick follows your finger), or use Arrow keys / WASD. Tap a block to walk over and dig it.</p>
+        <p><i data-ic="paw"></i><b>Pip</b> explores on his own: he digs, sniffs out treasure and fights cave creatures near him. Tap the paw button, then a spot, to send him there.</p>
+        <p><i data-ic="lantern"></i>Your lantern runs out of oil. Grab <i data-ic="flask"></i>oil flasks, dig deep and collect <i data-ic="ore:#ff9a3c"></i>ore. You sell it at camp.</p>
+        <p><i data-ic="rails"></i>Spend coins on the Upgrade Map. <i data-ic="relic"></i>At 100 m you can Cave-in for Relics and evolve Pip on the Relic Map.</p>
+        <p><i data-ic="mask"></i>Watch out for green gas rocks, water and lava.</p>
+        <h2><i data-ic="music"></i>Sound</h2>
+        <div class="row"><button id="btnMusic2" class="btn"><i data-ic="music"></i><span>Music: on</span></button><button id="btnSfx2" class="btn"><i data-ic="sound"></i><span>Sound: on</span></button></div>
+        <h2><i data-ic="notebook"></i>Save</h2>
         <p class="small">Saved on this device automatically.</p>
-        <div class="row"><button id="btnExport" class="btn">📤 Export</button><button id="btnImport" class="btn">📥 Import</button></div>
+        <div class="row"><button id="btnExport" class="btn"><i data-ic="up"></i>Export</button><button id="btnImport" class="btn"><i data-ic="depth"></i>Import</button></div>
         <textarea id="saveBox" rows="3" placeholder="Save code"></textarea>
-        <div class="row"><button id="btnReset" class="btn danger">🗑️ Reset everything</button></div>
+        <div class="row"><button id="btnReset" class="btn danger"><i data-ic="trash"></i>Reset everything</button></div>
         <p class="small" id="verTxt"></p>
       </div>
     </section>
 
     <nav class="tabs">
-      <button data-tab="home" class="on">🏠<small>Camp</small></button>
-      <button data-tab="map">🛤️<small>Upgrades</small><i class="dot hidden" id="dotUp"></i></button>
-      <button data-tab="relic" id="tabRelic">🗿<small>Relics</small><i class="dot hidden" id="dotPr"></i></button>
-      <button data-tab="set">⚙️<small>More</small></button>
+      <button data-tab="home" class="on"><i data-ic="tent"></i><small>Camp</small></button>
+      <button data-tab="map"><i data-ic="rails"></i><small>Upgrades</small><i class="dot hidden" id="dotUp"></i></button>
+      <button data-tab="relic" id="tabRelic"><i data-ic="relic"></i><small>Relics</small><i class="dot hidden" id="dotPr"></i></button>
+      <button data-tab="set"><i data-ic="cog"></i><small>More</small></button>
     </nav>
   </div>
 
   <div id="summary" class="modal hidden"><div class="card" id="sumCard"></div></div>
   <div id="confirm" class="modal hidden"><div class="card" id="confCard"></div></div>
   <div id="toast"></div>
+  <div id="fly"></div>
 </div>
 <script src="js/data.js"></script>
 <script src="js/core.js"></script>
 <script src="js/sprites.js"></script>
+<script src="js/icons.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/render.js"></script>
 <script src="js/maps.js"></script>

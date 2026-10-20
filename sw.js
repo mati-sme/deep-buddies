@@ -1,10 +1,10 @@
 /* Deep Buddies service worker: cache-first, relative paths (hosted under /deep-buddies/). Bump CACHE each release. */
 'use strict';
-const CACHE = 'deep-buddies-v3';
+const CACHE = 'deep-buddies-v4';
 const ASSETS = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
-  'js/data.js', 'js/core.js', 'js/sprites.js', 'js/audio.js', 'js/render.js', 'js/maps.js', 'js/game.js',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'
+  'js/data.js', 'js/core.js', 'js/sprites.js', 'js/icons.js', 'js/audio.js', 'js/render.js', 'js/maps.js', 'js/game.js',
+  'fonts/pixelify-sans.woff', 'fonts/db-digits.woff', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'
 ];
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
